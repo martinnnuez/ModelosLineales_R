@@ -1,1 +1,2 @@
-# ModelosLineales_R
+# Modelos Lineales en R
+Aplicaciones practicas en R.
