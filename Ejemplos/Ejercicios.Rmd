@@ -1,0 +1,2783 @@
+---
+title: "Scripts Di Rienzo"
+output:
+  pdf_document: default
+  html_document: default
+---
+#22-09-2020
+##Clipboard:
+```{r}
+datos<-read.table("clipboard",header = T,sep="\t",dec = ",")
+```
+
+##Base de datos
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls());
+x=seq(1,20)
+set.seed(5)
+n=length(x)
+Y= 30+0.7*x+rnorm(n,0,1)
+```
+
+## Ajustar modelo con funcion lm()
+```{r}
+modelo=lm(Y~x)
+
+modelo #devuelve los ceoficientes del modelo, los beta
+
+sigma(modelo)#devuelve la estiamcion maximo verosimil del desvio estandar
+
+model.matrix(modelo)#matriz de incidencia del modelo
+
+resid(modelo)#residuos del modelo
+
+sigma(modelo)^2 #devuelve la estimacion maximo verosimil de la varianza
+
+micov=vcov(modelo) #matriz de varianzas y covarianzas de los betas
+
+mibeta=modelo$coefficients #estimaciones maximo verosimiles de los beta
+
+miSummary=summary(modelo)
+miSummary$coefficients #Prueba de hipotesis para ver si los beta son cero
+
+```
+
+## Ajustar el modelo matricialmente
+### Matriz de incidencia
+```{r}
+X=cbind(1,x) #No olvidar poner los 1 para la constante si voy a ajustar matricialmente.
+X
+dim(X)
+```
+
+### Estimador maximo verosimil del beta
+```{r}
+b=solve(t(X)%*%X)%*%t(X)%*%Y;b
+```
+
+### Proyecciones y calculo de residuos
+```{r}
+PX= X%*%solve(t(X)%*%X)%*%t(X) #matriz de proyeccion
+PX%*%Y #proyeccion en el plano, SERIAN LAS PREDICCIONES
+
+I=diag(nrow(X)) #con X matriz de incidencia
+(I-PX)%*%Y #PROYECCION ORTOCOMPLEMENTARIA, serian los residuos.
+
+cbind(Y,(I-PX)%*%Y+PX%*%Y) #La suma devuevle el y original
+
+(I-PX)%*%Y #Resiudos del modelo
+cbind((I-PX)%*%Y,resid(modelo))
+
+t((I-PX)%*%Y)%*%((I-PX)%*%Y) #suma de los residuos cuadrados
+t(Y)%*%(I-PX)%*%Y #otra forma
+```
+
+###Calculo del estimador maximo verosimil de la varianza
+```{r}
+n=nrow(X)
+p=ncol(X)
+var=(t(Y)%*%(I-PX)%*%Y)/(n-p) #Estimacion maximo verosimil de la varianza de los datos
+t(Y)%*%(I-PX)%*%Y/sum(diag(I-PX)) #otra forma
+```
+
+###Matriz de varianza y covarianza de los beta
+```{r}
+vcov(modelo) #matriz de varianzas y covarianzas de los beta
+solve(t(X)%*%X)*(sigma(modelo)^2) #otra forma
+```
+
+###Matriz HAT; HAT%*%Y = PREDICHOS
+```{r}
+HAT= X%*%solve(t(X)%*%X)%*%t(X) #matriz de proyeccion PX
+
+HAT%*%Y #es la proyeccion o predichos
+
+covHat=HAT*sigma(modelo)^2 #Matriz de varianzas y covarianzas de valores esperados
+covHat #leverage cada uno de los elementos diagonales de esta matriz
+```
+
+###Analizis de leverage
+```{r}
+#si el leverage es mayor que lo siguiente es un leverage grande
+sum(diag(HAT))*2/n 
+p*2/n #p=nrow(X) y n=ncol(X), este es el que da 0.2
+#Asi verifica si leverage es mas grande que ese valor
+plot(seq(20),diag(HAT), ylim =c(0,0.25))
+abline(h=0.2)
+```
+
+## PRUEBA T: Preba de hipotesis para ver si los beta son ceros
+```{r}
+mibeta=modelo$coefficients; mibeta
+micov=vcov(modelo); micov #matriz de varianzas y covarianzas betas
+
+mat=(solve(t(X)%*%X)); mvarycov=0.846*mat #matriz de varianzas y covarianzas
+
+plot(x,Y);abline(b);abline(h=mean(Y),v=mean(x))
+#la recta de regresion para por el punto donde se juntan las medias
+
+EEbeta=sqrt(diag(micov))#Error estandar de los beta
+
+miT=mibeta/EEbeta#Prueba T para los beta
+miT#valor del estadistico t para la prueba de hipotesis de que bo b1 son ceros
+
+pvalue=(1-pt(miT,sum(diag(I-PX))))*2 #pvalor de la prueba T para cada uno de los coeficientes 
+pvalue=(1-pt(miT,(n-p)))*2
+pvalue
+
+cbind(mibeta,EEbeta,miT,pvalue)
+```
+
+## Intervalo de confianza Y prediccion al 95% Y GRAFICO para TODAS las predicciones
+```{r}
+predict(modelo,newdata=data.frame(x=5.5))#predecir un valor particular
+
+covHat=HAT*sigma(modelo)^2
+diag(covHat) #estas son las varianzas de los predichos
+
+sqrt(diag(covHat)) #Error estandar de los predichos
+
+YHAT=HAT%*%Y #predichos
+
+LI=YHAT-qt(0.975,(n-p))*sqrt(diag(covHat))
+LS=YHAT+qt(0.975,(n-p))*sqrt(diag(covHat))
+
+# Para limites de prediccion a esa varianza, le sumamos sigma cuadrado
+LIP=YHAT-qt(0.975,(n-p))*sqrt(diag(covHat)+sigma(modelo)^2)
+LSP=YHAT+qt(0.975,(n-p))*sqrt(diag(covHat)+sigma(modelo)^2)
+
+plot(x,Y);abline(b, col="red")
+points(x,LI,type="l", col="blue")
+points(x,LS,type="l", col="blue")
+points(x,LIP,type="l", col="brown")
+points(x,LSP,type="l", col="brown")
+
+#no contienen a los puntos, en esa region esta la verdadera media
+#la verdadera media esta con un 95% de confianza en ese rango (azul)
+#bandas de prediccion son para los datos no para la media, la de confianza es para la media
+
+##Hice yo con matrices mas facil
+b
+d=matrix(c(1,5.5),ncol=2,byrow=T)
+
+pred=d%*%b
+
+var=d%*%vcov(modelo)%*%t(d)
+
+EE=sqrt(var)
+
+LI=pred-qt(0.975,(n-p))*EE
+LS=pred+qt(0.975,(n-p))*EE
+```
+
+## Intervalo de confianza Y prediccion al 99% Y GRAFICO para TODAS las predicciones
+```{r}
+#Con una confianza especificada del 0.99
+confianza=0.99
+c=qt(1-(1-confianza)/2,n-p)
+LI=YHat-c*sqrt(diag(covYHat))
+LS=YHat+c*sqrt(diag(covYHat))
+
+LIp=YHat-c*sqrt(diag(covYHat)+sigma(modelo)^2)
+LSp=YHat+c*sqrt(diag(covYHat)+sigma(modelo)^2)
+
+plot(x,Y);abline(b,col="red")
+points(x,LI,type="l",col="blue")
+points(x,LS,type="l",col="blue")
+points(x,LIp,type="l",col="brown")
+points(x,LSp,type="l",col="brown")
+```
+
+#Ejemplo 20/10/2020 unifactorial sin covariable
+```{r, echo=F}
+rm(list=ls());
+Y=c(3,2,5,6,8,6)
+trat=c("A","A","B","B","C","C")
+```
+
+##Ajustamos modelo con lm()
+```{r}
+miModelo=lm(Y~trat)#tiene ordenada al origen y efecto de los tratamientos si queremos ponerla 1+, si no la queremos -1+ y la saca
+
+miModelo$coefficients #deberia esperar 4 coeficientes, elimino trat A como consecuencia de reparametrizacion, CATEGORIA DE REFERNCIA 
+
+model.matrix(miModelo) #matriz de incidencia, no tenemos tratA
+
+anova(miModelo) #Prueba de hipotesis para ver si las medias son iguales ANOVA
+```
+
+##Interpretacion de medias
+```{r}
+#medias de los tratamientos, m para la categoria de referencia; m+t2; m+t3
+M=matrix(c(1,0,0,
+           1,1,0,
+           1,0,1),byrow=T,ncol=length(miModelo$coefficients))
+M #aplicada al vector de coeficientes me tiene que devolver las medias
+
+M%*%miModelo$coefficients
+#tratB y tratC son las diferencias entre la media del tratA y ellos
+```
+
+##Prueba de hipotesis Efecto del factor principal (ver si las medias son iguales)
+```{r}
+K=matrix(c(1,-1,0,
+           1,0,-1),ncol=3,byrow=T) #Hipotesis nula (medias iguales) en terminos de la media
+#Tiene dos columnas la tercera relacion esta implicita, escribir asi.
+
+#tengo que escribir de la forma H*B=h
+#Pero ahora seria K*M*b=h, osea que K*M=H
+H=K%*%M
+
+mivcov=H%*%vcov(miModelo)%*%t(H)#Matriz de varianzas y covarianzas de Hb, al ser b normal, la combinacion lineal de Hb tiene distribucion normal con matriz de varianzas y covarianzas, H E t(H), E= matriz var y cov de los beta.
+
+b=miModelo$coefficients
+
+W=(t(H%*%b)%*%solve(mivcov)%*%(H%*%b))/nrow(H) #q=nrow(H), faltaria -h pero son ceros
+
+1-pf(W,nrow(H),length(Y)-length(b)) #pvalor asociado a esta W
+```
+
+##Sumas de cuadrados
+```{r}
+X=model.matrix(miModelo)
+
+P=X%*%solve(t(X)%*%X)%*%t(X)# matriz de proyeccion P
+
+I=diag(1,nrow(X)) #identidad
+
+R=I-P #R seria la parte residual
+
+t(Y)%*%R%*%Y #suma de cuadrados residual
+
+t(Y)%*%P%*%Y #suma de cuadrados de tratamiento no corregido
+
+U=matrix(rep(1,nrow(X)),ncol=1) #como la corrijo
+P1=U%*%solve(t(U)%*%U)%*%t(U)
+
+t(Y)%*%(P-P1)%*%Y #suma de cuadrados de tratamiento corregida por la ordenada al origen
+
+t(Y)%*%(P1)%*%Y #suma de cuadrados explicado por la ordenada al origen
+```
+
+## Prueba de hipotesis para ver si el promedio de trat A y B es igual a C y estimacion del intervalo de confianza para la diferencia
+```{r}
+K=matrix(c(1/2,1/2,-1),byrow=T,ncol=3) # en terminos de medias
+
+H=K%*%M
+
+K%*%M%*%b #diferencias estimadas
+
+mivcov=H%*%vcov(miModelo)%*%t(H) #matriz de varianzas y covarianzas de Hb
+
+W=(t(H%*%b)%*%solve(mivcov)%*%(H%*%b))/nrow(H)
+1-pf(W,nrow(H),length(Y)-length(b)) #pvalor asociado a esa W
+
+EDif=H%*%b #cuanto vale la diferencia estimada
+
+#TIENE DISTRIBUCION NORMAL CON MEDIA Y VARIANZA POR SER COMBINACION LINEAL
+#ESTO ME ABRE LA PUERTA PARA CALCULAR EL ERROR ESTANDAR Y DE AHI EL INTERVALO DE CONFIANZA
+
+EE=diag(sqrt(H%*%vcov(miModelo)%*%t(H)))#cual es el error estandar
+
+#calculo intervalo de confianza para alfa 0.05 estimacion +- t * el error estandar de ese estadistico
+gle=length(Y)-length(b)
+LI=EDif-qt(0.975,gle)*EE
+LS=EDif+qt(0.975,gle)*EE
+
+c(LI,LS)
+```
+
+##Solucion imponiendo restriccion
+```{r}
+###Forma resolver imponiendo restriccion
+X=model.matrix(Y~-1+trat)
+X=cbind(U=1,X)
+XPX=t(X)%*%X
+solve(XPX)
+C=matrix(c(0,1,1,1),ncol=4)
+t(X)%*%X
+
+XPXConRestriccion=rbind(cbind( XPX , t(C) ),cbind(C,0))
+
+solve(XPXConRestriccion)%*%c(t(X)%*%Y,0)
+
+solve(rbind(cbind(XPX,t(C)),cbind(C,0)))%*%c(t(X)%*%Y,0)
+X=rbind(X,C)
+Y=c(Y,0)
+XPX=t(X)%*%X
+solve(XPX)%*%t(X)%*%Y
+```
+
+#Ejemplo precipitaciones regresion y variables categoricas
+```{r, echo=F}
+rm(list=ls());
+setwd("C:/Users/Jose Maria/Desktop/MODELOS LINEALES/Ejemplos en R Di Rienzo")
+datos<-read.table("precipitaciones.txt",header=T,dec = ",")
+library(ggplot2)
+```
+
+##Primer modelo: regresion funcion regresora continua; se distingue una sola recta
+```{r}
+modelo1=lm(PT~Años,data=datos,na.action=na.omit)
+
+datos$Pred=predict(modelo1)#agrego columnita predichos a datos
+
+ggplot(datos,aes(x=Años,y=Pred,group=Estacion,col=Estacion))+
+  geom_line()+ #la linea representa a las predicciones del modelo y los puntos los originales
+  geom_point(aes(x=Años,y=PT))
+#regresion unico que hubo efecto año, estacion no teine influencia
+#por eso sale una recta comun para todos los datos
+#esta es la recta que yo genere
+
+modelo1 #devuelve coeficientes
+anova(modelo1) #no significativa la pendiente de años
+```
+
+##Segundo modelo: reg continua y otra de clasificacion: se distinguen dos rectas con igual pendiente y distinta ordenada al origen
+```{r}
+modelo2=lm(PT~Años+Estacion,data=datos,na.action=na.omit)
+datos$Pred2=predict(modelo2)
+#ahora x tiene indicadora de cada regresion, R elimina la primera osea A , entonces aparece indicadora de condicion B
+
+model.matrix(modelo2)
+
+#modelo2 agregamos estacion es distinta a la del modelo 1.
+ggplot(datos,aes(x=Años,y=Pred2,group=Estacion,col=Estacion))+
+  geom_line()+
+  geom_point(aes(x=Años,y=PT)) #cuando empleamos esta variable categorica se diferencian 2 rectas con la misma pendiente, pero distinta ordenada al origen.
+
+modelo2#coeficientes
+```
+
+##Tercer modelo: continua, clasificacion e interaccion; se distingue dos rectas distinta ordenada al origen y pendiente
+```{r}
+modelo3=lm(PT~Años+Estacion+Años*Estacion,data=datos,na.action=na.omit)
+datos$Pred3=predict(modelo3) #agrega una interaccion entre años y estacion
+
+model.matrix(modelo3) #se agrega columna de interaccion
+datos$Pred3=predict(modelo3)
+
+ggplot(datos,aes(x=Años,y=Pred3,group=Estacion,col=Estacion))+
+  geom_line()+
+  geom_point(aes(x=Años,y=PT)) # vemos que al agregar interaccion ademas cambia la pendeinte de las rectas
+
+modelo3
+
+modelo3$coefficients[1] #ordenada al origen de A
+
+modelo3$coefficients[2] #pendiente de A
+
+modelo3$coefficients[1]+modelo3$coefficients[3]#ordenada al origen de B
+
+modelo3$coefficients[2]+modelo3$coefficients[4]#pendiente de B
+
+```
+
+## Hacemos predicciones con tercer modelo
+```{r}
+#CUAL ES LA PRECIPITACION ESPERADA PARA 1990 EN B
+EB=matrix(c(1,40,1,40),ncol=4) #matriz que permite obtener prediccion
+VE=EB%*%modelo3$coefficients
+#EB ES LA MATRIZ TAL QUE PREMULTIPLICANDO LOS COEFICIENTES ESTIMADOS ME DEVUELVE LA ESPERANZA PARA ESE CASO PARTICULAR
+
+n=length(predict(modelo3))#con cuantos datos trabajo
+n=nrow(datos) #nrow(Y)
+
+EE=sqrt(EB%*%vcov(modelo3)%*%t(EB))#error estandar
+
+#INTERVALO DE CONFIANZA
+LI=VE-qt(0.975,modelo3$df.residual)*EE
+LS=VE+qt(0.975,modelo3$df.residual)*EE
+c(LI,LS)
+```
+
+###MEDIAS PARA CADA AÑO y grafica los intervalos
+```{r}
+n=length(predict(modelo3))
+
+EB=cbind(1,datos$Años,as.numeric(datos$Estacion=="B"),datos$Años*as.numeric(datos$Estacion=="B"))
+
+VE=EB%*%modelo3$coefficients
+EE=sqrt(diag(EB%*%vcov(modelo3)%*%t(EB)))
+LI=VE-qt(0.975,modelo3$df.residual)*EE
+LS=VE+qt(0.975,modelo3$df.residual)*EE
+
+Limites=cbind(VE,LI,LS)
+LimitesLm=predict(modelo3,interval="confidence",level=0.95)
+
+all(signif(Limites,5)==signif(LimitesLm,5))
+
+#Ahora vamos a hacer las curvas de intervalo de confianza
+#agrgamos las columnas LI Y LS para poder graficarlas
+datos$LI=LI
+datos$LS=LS
+head(datos)
+
+#intervalo de prediccion
+
+LIP=VE-qt(0.975,modelo3$df.residual)*sqrt(EE^2+sigma(modelo3)^2)
+LSP=VE+qt(0.975,modelo3$df.residual)*sqrt(EE^2+sigma(modelo3)^2)
+
+datos$LIP=LIP
+datos$LSP=LSP
+
+ggplot(datos,aes(x=Años,y=Pred3,group=Estacion,col=Estacion))+
+  geom_line()+
+  geom_point(aes(x=Años,y=PT),size=1)+
+  geom_line(aes(x=Años,y=LI),lty=2)+ #agrega limites inferiores
+  geom_line(aes(x=Años,y=LS),lty=2)+
+  geom_line(aes(x=Años,y=LIP),lty=3)+ 
+  geom_line(aes(x=Años,y=LSP),lty=3)+
+  facet_wrap(~Estacion)+
+  theme(legend.position="none")
+
+
+
+
+```
+
+#Guia 2 practica
+##Cargar datos para hacer el modelo
+```{r}
+rm(list=ls());
+Y=matrix(c(3,2,4,9,6,7,2,6,5,8),nrow=10,byrow=TRUE);Y   
+#X=matrix(c(rep(1,10),1,1,3,7,8,7,4,6,6,9,3,4,7,9,7,6,5,8,5,7), nrow=10,byrow=F);X #matriz de incidencia con 1 para la constante
+
+Xmodelo=matrix(c(1,1,3,7,8,7,4,6,6,9,3,4,7,9,7,6,5,8,5,7), nrow=10,byrow=F)
+
+modelo=lm(Y~Xmodelo) #ya estima la constante no hace falta aclarar 1
+```
+
+##Estime lo parametros del modelo
+```{r}
+b=solve(t(X)%*%X)%*%t(X)%*%Y;b
+modelo$coefficients
+```
+
+##Varianza del estimador beta
+```{r}
+s2=t(Y-(X%*%b))%*%(Y-(X%*%b))/(nrow(X)-ncol(X))#estimador maximo verosimil corregido de la varianza
+covb=1.602763*(solve(t(X)%*%X))# poner numerica la varianza porque si no no la toma
+
+vcov(modelo)
+diag(covb)
+```
+
+##Intervalo de confianza al 95 para una prediccion particular
+```{r}
+x=matrix(c(1,5,7),nrow=1) #matriz que permite obtener la prediccion
+VE=x%*%b
+
+#Varianza de esta prediccion, por ser combinacion lineal del b que tiene distirbucion normal es
+var=x%*%vcov(modelo)%*%t(x)
+
+#el intervalo de confianza
+n=nrow(X)
+p=ncol(X)
+LI=VE-qt(0.975,(n-p))*sqrt(var)
+LS=VE+qt(0.975,(n-p))*sqrt(var)
+c(LI,LS)
+
+```
+
+##Menor amplitud intervalo confianza en las medias; predicciones mas exactas cerca de la media de los datos
+```{r}
+apply(X,2,mean)
+xmin=matrix(c(1,5.2,6.1),nrow=1)
+Ve=xmin%*%b
+
+Var=xmin%*%vcov(modelo)%*%t(xmin)
+Li=Ve-qt(0.975,(n-p))*sqrt(Var)
+Ls=Ve+qt(0.975,(n-p))*sqrt(Var)
+c(Li,Ls)
+```
+
+##PRUEBAS F
+##prueba de hipotesis b1=0, con matriz h de resultados
+##h de resultados
+```{r}
+b
+H=matrix(c(0,1,0),nrow=1)
+h=matrix(c(0),nrow=1)
+
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H)
+
+1-pf(W,nrow(H),length(Y)-length(b))
+
+#Suma de cuadrados asociada Q, SCB1
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+
+Q=(t(H%*%b-h)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%(H%*%b-h));Q
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+
+```
+
+##prueba de hipotesis b1=b2=0 (fila anova)
+```{r}
+H=matrix(c(0,1,0,
+           0,0,1),nrow=2,ncol=3,byrow=T)
+h=matrix(c(0,0),nrow=2)
+
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H)
+
+1-pf(W,nrow(H),length(Y)-length(b))
+```
+
+##prueba de hipotesis b1=b2    b1-b2=0
+```{r}
+H=matrix(c(0,1,-1),nrow=1)
+h=matrix(c(0),nrow=1)
+
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H)
+
+1-pf(W,nrow(H),length(Y)-length(b))
+
+```
+
+##intervalo confianza b1
+```{r}
+x=matrix(c(0,1,0),nrow=1)
+b1=x%*%b
+
+#Varianza de esta prediccion, por ser combinacion lineal del b que tiene distirbucion normal es
+var=x%*%vcov(modelo)%*%t(x)
+
+#el intervalo de confianza
+n=nrow(X)
+p=ncol(X)
+LI=b1-qt(0.975,(n-p))*sqrt(var)
+LS=b1+qt(0.975,(n-p))*sqrt(var)
+c(LI,LS)
+```
+
+##intervalo confianza b1-b2
+```{r}
+x=matrix(c(0,1,-1),nrow=1)
+b1mb2=x%*%b
+
+#Varianza de esta prediccion, por ser combinacion lineal del b que tiene distirbucion normal es
+var=x%*%vcov(modelo)%*%t(x)
+
+#el intervalo de confianza
+n=nrow(X)
+p=ncol(X)
+LI=b1mb2-qt(0.975,(n-p))*sqrt(var)
+LS=b1mb2+qt(0.975,(n-p))*sqrt(var)
+c(LI,LS)
+```
+
+##CALCULO DE LAS SUMAS DE CUADRADOS y tambien como cancu calcula
+##Cuanto explica cada variable independiente
+```{r}
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+
+U=matrix(rep(1,nrow(X)),ncol=1) #como la corrijo
+P1=U%*%solve(t(U)%*%U)%*%t(U)
+
+SCT=t(Y)%*%Y; SCT
+SCMnc=t(Y)%*%P%*%Y; SCMnc
+SCR=t(Y)%*%(I-P)%*%Y; SCR
+SCbo=t(Y)%*%P1%*%Y;SCbo
+SCMc=t(Y)%*%(P-P1)%*%Y; SCMc #(divide en el anova)
+
+# CALCULO DE SUMAS DE CUADRADOS CANCU
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+SCt <- t(Y) %*% Y; SCt # suma de cuadrado total
+SCm <- t(Y) %*% P %*% Y; SCm # suma de cuadrado explicada por el modelo
+SCr <- t(Y) %*% (diag(n) - P) %*% Y; SCr # suma de cuadrado residual
+
+# suma de cuadrado debida a Bo
+Xo <- X[,1,drop=F]; Xo
+Po <- Xo %*% solve(t(Xo) %*% Xo) %*% t(Xo); # se puede llamar Po a esta parte del SCBo
+# SCBo <- t(Y)%*%Po%*%Y; SCBo
+SCBo <- t(Y) %*% Xo %*% solve(t(Xo) %*% Xo) %*% t(Xo) %*% Y; SCBo
+
+# suma de cuadrado del modelo corregida por Bo
+SCmcBo <- t(Y) %*% (P-Po) %*% Y; SCmcBo
+
+#  suma de cuadrado total corregida por Bo
+SCtcBo <- SCt - SCBo; SCtcBo
+
+# suma de cuadrado debida a B1
+X1 <- X[,2,drop=F]; X1
+P1 <- X1 %*% solve(t(X1) %*% X1) %*% t(X1);
+SCB1 <- t(Y) %*% P1 %*% Y; SCB1
+
+# suma de cuadrado debida a B2
+X2 <- X[,3,drop=F]; X2
+P2 <- X2 %*% solve(t(X2) %*% X2) %*% t(X2); 
+SCB2 <- t(Y) %*% P2 %*% Y; SCB2
+
+# suma de cuadrados debida a B1 condicional a Bo y B2 # ejemplo en pag 66
+Xo2 <- X[,c(1,3), drop=F]; Xo2
+Po2 <- Xo2 %*% solve(t(Xo2) %*% Xo2) %*% t(Xo2); 
+
+SCrBoB2 <- t(Y) %*% (diag(n) - Xo2 %*% solve(t(Xo2) %*% Xo2) %*% t(Xo2)) %*% Y; SCrBoB2
+SCrBoB1B2 <- t(Y) %*% (diag(n) - X %*% solve(t(X) %*% X) %*% t(X)) %*% Y; SCrBoB1B2
+
+SCrBoB2 - SCrBoB1B2; # suma de cuad debida a B1 condicional a Bo y B2
+t(Y) %*% (P - Po2) %*% Y # otra forma mas sencilla JA! 
+```
+
+##Funcion que chequea Ho con W,q,n-p,alfa
+```{r}
+checkHo <- function(estadistF, q, n_p, alfa=0.05) {
+    # esta es la funcion para chequear las Ho que se piden como ejercicios 5j y 6f
+    pval <- 1 - pf(estadistF, q, n_p); # tambien podria ser pval <- pf(estadistF, q, n_p, lower.tail=F);
+    print(paste("pval=", pval, sep=""));
+    print(paste("alfa=", alfa, sep=""));
+    if (pval < alfa) {
+        print("Se rechaza Ho");
+    } else {
+        print("No existe evidencia para rechazar Ho");
+    }
+}
+```
+
+##Como cancu verifica hipotesis nulas
+```{r}
+Ho <- matrix(c(0,1,0),nrow=1,byrow=TRUE); Ho
+h <- 0;
+q <- nrow(Ho);
+SCHo <- t((Ho %*% b) - h) %*% solve(Ho %*% solve(t(X)%*%X) %*% t(Ho)) %*% ((Ho %*% b) - h);  SCHo
+
+W <- (SCHo * (n-p)) / ((t(Y) %*% (diag(n) - P) %*% Y) * q); W
+checkHo(W, q, n-p);
+
+```
+
+##Ejercicio 6:
+```{r}
+#Ejercico 6= 
+rm(list=ls());
+Y=matrix(c(25,29.5,34.8,28.4,33,38.9),ncol=1,byrow=T)
+X=matrix(c(0,1,2,0,1,2,
+           0,0,0,1,1,1),ncol=2,byrow=F)
+
+modelo=lm(Y~X)
+b=modelo$coefficients;b
+X=model.matrix(modelo)
+vcov(modelo)
+
+#Efecto del nitrogeno duplica potasio
+H=matrix(c(0,1,-2),ncol=3,byrow=T)
+H%*%b #diferencia estimada
+#Hago la prueba de hipotesis:
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+
+#Suma de cuadrados asociada Q
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+
+Q=(t(H%*%b)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%H%*%b);Q
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+
+
+
+
+#B1=B2+1.5
+H=matrix(c(0,1,-1),nrow=1)
+h=matrix(c(1.5),nrow=1)
+
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H);W
+
+1-pf(W,nrow(H),length(Y)-length(b))
+#Suma de cuadrados asociada Q
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+
+Q=(t(H%*%b-h)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%(H%*%b-h));Q
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+```
+
+#4ta semana 
+##leer los datos
+```{r}
+rm(list=ls());
+setwd("C:/Users/Jose Maria/Desktop/MODELOS LINEALES/SEMANA 4")
+datos<-read.table("Vecinos.txt",header = T,sep="\t",dec = ",")
+
+```
+
+##Modelo sin incluir covariable e incluyendo covariable
+```{r}
+modelo=lm(Increm.~Especie,data=datos)
+modelo$coefficients
+model.matrix(modelo)
+datos
+anova(modelo)
+```
+
+##Modelo incluyendo covariable
+```{r}
+modelo=lm(Increm.~Especie+vecinos,data=datos)
+model.matrix(modelo)
+anova(modelo) #se puede ver que los residuos disminuyen proporcionalmente a la variabilidad explicada por la covariable.
+
+mib=modelo$coefficients
+```
+
+##Calculo de las medias del nivel CON COVARIABLE depende de ella
+##En modelos aditivos la diferencia de medias no depende del valor de la covariable
+```{r}
+mib=modelo$coefficients
+x=mean(datos$vecinos)
+mediaFlexuosa= mib[1]+mib[2]+mib[3]*0+mib[4]*x
+
+M=matrix(c(1,0,1,x,#nigra
+           1,1,0,x,#flexuosa
+           1,0,0,x),ncol=length(mib),byrow=T)#chilensis #media de cada especie
+
+#Devuelve las medias de las especies
+M%*%mib
+
+#Errores estandares
+sqrt(diag(M%*%vcov(modelo)%*%t(M)))
+
+#cuando hacemos x=0
+x=0
+#las medias dan mas altas
+x=5
+#cambia mis medias y mis errores estandares
+#Las diferencias se manteinen iguales pq es un modelo aditivo sin interaccion
+```
+
+##Incluimos interaccion en modelo con covariable, grafico para analizis medias
+##En modelos con interaccion la diferencia de medias depende del valor que toma la covariable
+```{r}
+modelo=lm(Increm.~Especie+vecinos+Especie*vecinos,data=datos)
+model.matrix(modelo)
+
+mib=modelo$coefficients
+M=matrix(c(1,0,1,x,0,x,#nigra
+           1,1,0,x,x,0,#flexuosa
+           1,0,0,x,0,0),ncol=length(mib),byrow=T)
+
+#Devuelve las medias de las especies
+M%*%mib
+
+
+#Errores estandares
+sqrt(diag(M%*%vcov(modelo)%*%t(M)))
+```
+
+##Hace el grafico de medias (con interaccion) para las distintas especies en un rango de valores
+```{r}
+unique(datos$Especie)
+
+plotdatos=expand.grid(Especie=c("flexuosa" , "chilensis" ,"nigra"),vecinos=seq(0,5,0.1)) #hace una tabla con las especies y vecinos que varian de 0 a 5 de 0.1 en 0.1
+
+plotdatos$predict=predict(modelo,newdata=plotdatos)# agrega los valores predichos a la tabla 
+
+library(ggplot2)
+
+ggplot(plotdatos,aes(vecinos,predict,group=Especie))+
+  geom_line(aes(color=plotdatos$Especie))+
+  scale_color_discrete(name="Especie")
+
+#Se puede ver la variacion de la prediccion media, y como a medida que cambia la covariable tambien lo hace la respuesta. Especie se ve influenciada por vecinos debido a que las rectas no son paralelas.
+
+```
+
+#EJEMPLO BIFACTORIAL CON INTERACCION, prueba de hipotesis
+```{r}
+remove(list = ls())
+set.seed(30)
+#creamos base de datos
+data=expand.grid(A=c("a1","a2","a3"),B=c("b1","b2"),r=c(1,2))
+#le agrega la respuesta
+data$Y=rnorm(nrow(data),30,3)
+data=data[,-3]
+
+```
+
+##Modelo
+```{r}
+modelo1=lm(Y~A+B,data=data)
+model.matrix(modelo1)
+
+#agrego interacciones, aparecerian 2 columnitas mas que serain los productos entre las columnas
+modelo2=lm(Y~A+B+A*B,data=data)
+model.matrix(modelo2)
+
+anova(modelo2)
+# cuenta de donde salen los grados de libertad, los de la interaccion de la cantidad de columnas de cada una de las variables individuales.
+
+#La model matrix da indicio de cuales son los parametros que aparecen en la ecuacion de la regresion lineal
+model.matrix(modelo2)[12,]
+```
+
+##Obtencion medias tratamiento y marginales
+```{r}
+#como calculamos las medias de los tratamientos
+#medias de los niveles y luego de las medias marginales
+model.matrix(modelo2)[12,]
+#matriz de incidencia para una observacion particular 
+
+#matriz para devovler las medias
+M= matrix(c(1,0,0,0,0,0,
+            1,0,0,1,0,0,
+            1,1,0,0,0,0,
+            1,1,0,1,1,0,
+            1,0,1,0,0,0,
+            1,0,1,1,0,1),byrow=T,ncol=length(modelo2$coefficients))
+rownames(M)=c("a1b1","a1b2","a2b1","a2b2","a3b1","a3b2")
+
+
+#devuelve las medias de cada tratamiento 
+M%*%modelo2$coefficients
+
+```
+
+##Prueba de hipotesis efecto principal del factor A
+```{r}
+#1 calcular las medias marginales del factor
+#matriz K que por la de medias me permite obtener las medias marginales de A
+K=matrix(c(1/2,1/2,0,0,0,0, #primeras 2 marginal a1 
+    0,0,1/2,1/2,0,0, #3 y 4 marginal a2
+    0,0,0,0,1/2,1/2),ncol=6, byrow=T) #marginal a3
+#obtengo las medias marginales de A
+K%*%M%*%modelo2$coefficients
+
+#2 calcular la matriz H que permite comparar
+#matriz facil de combinacion de medias
+Q=matrix(c(1,-1,0,
+           1,0,-1),ncol=3, byrow=T)
+b=modelo2$coefficients
+#esta es la H del test de hipotesis para el tratamiento A, efecto del factor principal A
+H=Q%*%K%*%M
+
+H%*%b #estimacion de las diferencias de las medias de tratamiento A
+
+#3 hago el test de hipotesis
+#Obtengo el estadistico para calcular el p valor para esta prueba de hipotesis.
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo2)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))                      
+#es nrow(data)
+
+```
+
+##Prueba de hipotesis efecto principal factor B
+```{r}
+#lo mismo para el efecto principal de B
+#matriz K que por la de medias me permite obtener las medias marginales
+K=matrix(c(1/3,0,1/3,0,1/3,0, #marginal b1 
+           0,1/3,0,1/3,0,1/3 #marginal b2
+           ),ncol=6, byrow=T)
+
+#obtengo las medias marginales de A
+K%*%M%*%modelo2$coefficients
+
+#matriz facil de combinacion de medias
+Q=matrix(c(1,-1),ncol=2, byrow=T)
+
+b=modelo2$coefficients
+#esta es la H del test de hipotesis para el tratamiento A, efecto del factor principal A
+H=Q%*%K%*%M
+
+#Obtengo el estadistico para calcular el p valor para esta prueba de hipotesis.
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo2)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))                          
+#es nrow(data)
+
+```
+
+##Prueba de hipotesis para la interaccion:
+```{r}
+#Se compara directamente sobre las medias marginales
+M
+
+Q=matrix(c(1,-1,-1,1,0,0,
+    1,-1,0,0,-1,1),byrow=T,ncol=6)
+
+H=Q%*%M
+#interesante da que los dos coeficinetes de los terminos de interaccion tienen que ser 0
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo2)%*%t(H))%*%(H%*%b))/nrow(H)
+1-pf(W,nrow(H),nrow(data)-length(b))
+
+```
+
+##Errores estandares para las medias del factor A e intervalo de confianza
+```{r}
+#errores estandares para las A
+
+K=matrix(c(1/2,1/2,0,0,0,0, #primeras 2 marginal a1 
+           0,0,1/2,1/2,0,0, #3 y 4 marginal a2
+           0,0,0,0,1/2,1/2),ncol=6, byrow=T) #marginal a3
+
+#obtengo las medias marginales de A
+MA=K%*%M%*%modelo2$coefficients
+
+#errores estandares para las A
+K%*%M%*%vcov(modelo2)%*%t(K%*%M)
+
+EE=sqrt(diag(K%*%M%*%vcov(modelo2)%*%t(K%*%M)))
+# modelo homocedastico dan los mismos errores estandares.
+
+#Intervalo de confianza
+n=nrow(data)
+p=length(modelo2$coefficients)
+LI=MA-qt(0.975,(n-p))*EE
+LS=MA+qt(0.975,(n-p))*EE
+c(LI,LS)
+```
+
+#BIFACTORIAL+COVARIABLE 3x2 con covariable. Dia taller software 17-11-2020. 
+##carga de datos y un grafico de puntos para distintos valores covariable
+```{r}
+remove(list = ls())
+setwd("C:/Users/Jose Maria/Desktop/MODELOS LINEALES/SEMANA 4")
+data<-read.table("InteraccionyCov.txt",header = T,sep="\t",dec = ",")
+
+modelo=lm(Y~A+B+A*B+x+B*x,data=data)
+
+model.matrix(modelo)
+```
+
+##Medias para tratamiento con covariable
+##Hace un df con medias para distinto valor de la covariable
+```{r}
+medias=NULL
+#corro para 2,4,6
+x=6
+b=modelo$coefficients
+
+M=matrix(c(1,0,0,0,x,0,0,0,
+           1,0,0,1,x,0,0,x,
+           1,1,0,0,x,0,0,0,
+           1,1,0,1,x,1,0,x,
+           1,0,1,0,x,0,0,0,
+           1,0,1,1,x,0,1,x),byrow=T,ncol=length(modelo$coefficients))
+
+M%*%b
+
+rownames(M)=c("a1_b1","a1_b2","a2_b1","a2_b2","a3_b1","a3_b2")
+medias=rbind(medias,cbind(x,M%*%b))
+```
+
+##Separa valores y hace un grafico con medias para distintos valores de la covariable
+```{r}
+#ahora lo quiero separar en b1 y a1, aplicando strsplit
+
+MID=do.call("rbind",lapply(rownames(medias),function(x) strsplit(x,split="_")[[1]]))
+
+mediascompletas=data.frame(MID,medias)
+
+library(ggplot2)
+ggplot(mediascompletas, aes(X1,V2,group=X2,color=x))+
+  geom_point()
+
+```
+
+## Hace anova y quiere verificar resultados
+```{r}
+#como se si esos coeficientes son significativos
+anova(modelo)
+#conclucion covariable no interactua con b y no tiene efecto
+b=modelo$coefficients
+
+#H para la interaccion con la covariable 
+H=matrix(c(0,0,0,0,0,0,0,1),ncol=8,byrow=T)
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+1-pf(W,nrow(H),nrow(data)-length(b))   
+
+#Para el efecto de la covariable
+H=matrix(c(0,0,0,0,1,0,0,0),ncol=8,byrow=T)
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+1-pf(W,nrow(H),nrow(data)-length(b))   
+#0.78878
+#no coinciden los test con el de anova(modelo)
+#como esta afectando la covariable, esta como efecto principal y como interaccion!
+#existe efecto de la covariable, es solo ese 0 o son ambos cero, interaccion y efecto principal,
+#necesito dos hipotesis
+
+```
+
+## library(nlme) No coincide anova(modelo) con resultados Nuevo modelo en caso 
+```{r}
+library(nlme)
+modelo=gls(Y~A+B+A*B+x+B*x,data=data)
+anova(modelo,type="marginal")
+model.matrix(modelo,data=data)
+#forma distinta de codificar el modelo en la matriz de incidencia
+#cuando le pusimos covariable e interaccion dejo de funcionar la otra cosa.
+
+#pero la forma de identificar los test de hipotesis da los de cuadrados de tipo 3 
+#comparamos con tabla que no era la correcta
+
+#misma tabla que obteniamos antes
+anova(modelo) 
+
+#estas tablas muestra otras cosas
+
+#tabla con suma de cuadrados tipo 3
+anova(modelo,type="marginal")
+#las tablas no son las mismas
+```
+
+#Arrancamos 18-11-2020 con el mismo ejemplo y hacemos algunas pruebas de hipotesis
+##vuelvo a cargar M
+##ACA LE DAMOS EL VALOR PARTICULAR A X=3 y luego hacemos pruebas de hipotesis normal
+```{r}
+x=3
+M=matrix(c(1,0,0,0,x,0,0,0,
+           1,0,0,1,x,0,0,x,
+           1,1,0,0,x,0,0,0,
+           1,1,0,1,x,1,0,x,
+           1,0,1,0,x,0,0,0,
+           1,0,1,1,x,0,0,x),byrow=T,ncol=length(modelo$coefficients))
+
+rownames(M)=c("a1_b1","a1_b2","a2_b1","a2_b2","a3_b1","a3_b2")
+M%*%b
+
+```
+
+##diferencia de medias y error estandar entre a1 y a2 dado que x=3
+```{r}
+MA=matrix(c(1/2,1/2,0,0,0,0, #primeras 2 marginal a1 
+           0,0,1/2,1/2,0,0), #3 y 4 marginal a2),
+           ncol=6, byrow=T) 
+
+#obtube las medias marginales de A1 y A2
+MA%*%M%*%b
+
+#Matriz de comparacion
+Q=matrix(c(1,-1),ncol=2, byrow=T)
+
+#Estimacion de la diferencia de medias
+difmed=Q%*%MA%*%M%*%b
+
+#obtengo H
+H=Q%*%MA%*%M
+
+#Calculo del error estandar
+EE=sqrt(H%*%vcov(modelo)%*%t(H))
+```
+
+##prueba T equivlente prueba F
+```{r}
+#estadistico t equivalente a prueba F
+(1-pt(difmed/EE,3))*2
+#da no significativa
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+1-pf(W,nrow(H),nrow(data)-length(b))
+```
+
+##diferencia de medias y error estandar entre a1_b2 y a2_b1 y x=3
+```{r}
+#ahora no hay que sacar marginales
+#Si no que buscar la matriz que me permite comparar esas dos medias directamente
+Q=matrix(c(0,1,-1,0,0,0),ncol=6, byrow=T)
+
+#Esta es la direferncia de estas medias
+difmed=Q%*%M%*%b
+
+#obtengo H
+H=Q%*%M
+
+#Calculo del error estandar
+EE=sqrt(H%*%vcov(modelo)%*%t(H))
+
+#estadistico t= difmed/EE
+(1-pt(difmed/EE,3))*2
+#da no significativa
+
+
+#Prueba que T al cuadrado da lo mismo que la F
+(difmed/EE)**2
+
+#calculamos la F
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+#calculamos el p valor
+1-pf(W,nrow(H),nrow(data)-length(b)) 
+```
+
+##EFECTO DEL TRATAMIENTO A CON B2 Y X=3 :diferencia de medias y error estandar entre a1_b2 y a2_b2 y a3_b2 dado x=3 
+```{r}
+#ahora no hay que sacar marginales
+#Si no que buscar la matriz que me permite comparar esas dos medias directamente
+Q=matrix(c(0,1,0,-1,0,0,
+           0,1,0,0,0,-1),ncol=6, byrow=T)
+
+
+#Esta es la direferncia de estas medias
+Q%*%M%*%b
+
+#obtengo H
+H=Q%*%M
+dim(H)
+
+#calculamos la F
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+#calculamos el p valor
+1-pf(W,nrow(H),nrow(data)-length(b)) 
+
+```
+##Hice yo:
+###PRUEBAS DE HIPOTESIS TABLA ANOVA
+```{r}
+#Efecto factor principal A
+unique(data$A)
+
+#1 calcular las medias marginales del factor
+K=matrix(c(1/2,1/2,0,0,0,0, #primeras 2 marginal a1 
+           0,0,1/2,1/2,0,0, #3 y 4 marginal a2
+           0,0,0,0,1/2,1/2),ncol=6, byrow=T) #marginal a3
+
+#obtengo las medias marginales de A
+K%*%M%*%modelo$coefficients
+
+#2 calcular la matriz H que permite comparar
+#matriz facil de combinacion de medias
+Q=matrix(c(1,-1,0,
+           1,0,-1),ncol=3, byrow=T)
+
+H=Q%*%K%*%M
+
+H%*%b #estimacion de las diferencias de las medias de tratamiento A
+
+#3 hago el test de hipotesis
+#Obtengo el estadistico para calcular el p valor para esta prueba de hipotesis.
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))                      
+#COMPARADO INFOSTAT ESTA BIEN
+
+
+#Efecto factor principal B: (NO ME DA COMO INFOSTAT)
+#1 calcular las medias marginales del factor
+K=matrix(c(1/3,0,1/3,0,1/3,0, #b1
+           0,1/3,0,1/3,0,1/3),ncol=6, byrow=T) #b2
+
+#obtengo las medias marginales de B
+K%*%M%*%modelo$coefficients
+
+#2 calcular la matriz H que permite comparar
+#matriz facil de combinacion de medias
+Q=matrix(c(-1,1),ncol=2, byrow=T)
+
+H=Q%*%K%*%M
+
+H%*%b #estimacion de las diferencias de las medias de tratamiento A
+
+#3 hago el test de hipotesis
+#Obtengo el estadistico para calcular el p valor para esta prueba de hipotesis.
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))                      
+#es nrow(data)
+
+
+#Efecto de la interaccion A*B
+M%*%b
+#Matriz H directamente junta esos coeficientes
+H=matrix(c(0,0,0,0,0,1,0,0,
+           0,0,0,0,0,0,1,0),ncol=8, byrow=T)
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))    
+
+#Intento obtener H a partir de comparacion
+M%*%b
+Q=matrix(c(1,-1,-1,1,0,0,
+           1,-1,0,0,-1,1),ncol=6,byrow=T)
+
+H=Q%*%M #Ahora si me da la H
+
+
+#Efecto interaccion con covariable
+#Matriz H que directamente junta ese coeficiente
+H=matrix(c(0,0,0,0,0,0,0,1),ncol=8, byrow=T)
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))
+
+
+#Efecto covariable
+H=matrix(c(0,0,0,0,1,0,0,0),ncol=8, byrow=T)
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))
+
+
+#Prueba de hipotesis para a1 dado x fijo en media
+Q=matrix(c(1,0,-1,0,0,0,
+           1,0,0,0,-1,0),ncol=6,byrow=T)
+
+H=Q%*%M
+
+W=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b))/nrow(H)
+
+1-pf(W,nrow(H),nrow(data)-length(b))
+
+```
+
+###INTERVALOS DE CONFIANZA Y PREDICCION: para los b:
+```{r}
+#Intervalo de confianza al 95% para los b
+b
+EE=sqrt(diag(vcov(modelo)))
+
+n=nrow(data)
+p=length(modelo$coefficients)
+
+LI=b-qt(0.975,(n-p))*EE
+LS=b+qt(0.975,(n-p))*EE
+c(LI,LS)
+
+#Intervalos de prediccion al 95% para los b
+LIp=b-qt(0.975,(n-p))*(EE+(sigma(modelo)**2))
+LSp=b+qt(0.975,(n-p))*(EE+(sigma(modelo)**2))
+c(LIp,LSp)
+
+
+#Prediccion particular e intervalos: a2=1, b2=1, x=8
+P=matrix(c(1,1,0,1,8,1,0,8),ncol=8,byrow=T)
+
+Est=P%*%b
+Var=P%*%vcov(modelo)%*%t(P)
+EE=sqrt(Var)
+
+n=nrow(data)
+p=length(modelo$coefficients)
+
+LI=Est-qt(0.975,(n-p))*EE
+LS=Est+qt(0.975,(n-p))*EE
+c(LI,LS)
+
+LIp=Est-qt(0.975,(n-p))*(EE+(sigma(modelo)**2))
+LSp=Est+qt(0.975,(n-p))*(EE+(sigma(modelo)**2))
+c(LIp,LSp)
+```
+
+
+#Guia practica numero 3
+##Actividad 1: UNIFACTORIAL
+```{r}
+rm(list=ls());
+# actividad 1
+Y=matrix(c(3,2,1,2,2,4,5,2,5,5,2,4),ncol=1)
+A=factor(c(1,1,1,2,2,2,3,3,3,4,4,4))
+
+# inciso b 
+#Matriz de incidencia modelo planteado
+X=matrix(c(1,1,0,0,0, 
+           1,1,0,0,0, 
+           1,1,0,0,0, 
+           1,0,1,0,0, 
+           1,0,1,0,0, 
+           1,0,1,0,0,
+           1,0,0,1,0, 
+           1,0,0,1,0, 
+           1,0,0,1,0, 
+           1,0,0,0,1, 
+           1,0,0,0,1, 
+           1,0,0,0,1), byrow=T, ncol=5)
+X
+
+# inciso c
+t(X)%*%X
+
+solve(t(X)%*%X) #es una matriz singular por lo tanto no acepta inversa
+
+det(t(X)%*%X)#determinante 0 confirma que no admite inversa
+#Nos damos cuenta de que se trata de un modelo de rango incompleto, debemos buscar otra solucion
+```
+
+###Calculo por inversa generalizada
+```{r}
+# ALTERNATIVA 1: cálculo de una inversa generalizada para X'X
+# Calcula Moore-Penrose generalized inverse of a matrix
+
+library(MASS)
+G=ginv(t(X)%*%X)
+G
+round(t(X)%*%X%*%G%*%t(X)%*%X,4)   # verificar condición de inversa generalizada
+
+
+Xinv=ginv(X)
+Xinv
+round(X%*%Xinv%*%X,4)   # verificar condición de inversa generalizada devuelve el t(X)%*%X
+
+round(X%*%G%*%t(X)%*%X,4) 
+
+#Una de las posibles soluciones
+bo=G%*%t(X)%*%Y
+bo
+
+# inciso d
+
+q1=c(1,1,0,0,0); q1
+q2=c(0,1,-1,0,0);q2
+q3=c(0,1,0,0,0); q3
+q4=c(0,1,0,-1,0);q4
+
+H=G%*%t(X)%*%X ;H
+
+# prueba de estimabilidad
+
+round(q1%*%G%*%t(X)%*%X,4)==q1
+
+round(q1%*%H,4)
+round(q2%*%H,4)
+round(q3%*%H,4)
+round(q4%*%H,4)
+
+# estimaciones de eso que queria ver si era funcion estimable
+round(q1%*%bo,4)
+round(q2%*%bo,4)
+round(q4%*%bo,4)
+```
+
+###Reparametrizacion del modelo
+```{r}
+# ALTERNATIVA 2: reparametrización del modelo
+
+# OPCIÓN 1: 
+
+Lp1=matrix(c(1,1,0,0,0, 
+             1,0,1,0,0, 
+             1,0,0,1,0, 
+             1,0,0,0,1),byrow=T, ncol=5)
+Lp1
+
+round(Lp1%*%H,4)#verifica que son funciones estimables
+
+
+# verificar que son funciones estimables
+
+round(Lp1[1,]%*%H,4)    
+round(Lp1[2,]%*%H,4)
+round(Lp1[3,]%*%H,4)
+round(Lp1[4,]%*%H,4)
+
+U1=X%*%ginv(Lp1)
+round(U1,4)
+
+
+theta1=solve(t(U1)%*%U1)%*%t(U1)%*%Y
+theta1 #estimaciones de los parametros, tita m1,m2,m3,m4 sin ordenada al origen
+
+#lo mismo que hacer este modelo.
+modelo1=lm(Y~-1+A)
+modelo1$coefficients
+
+
+# inciso d
+
+
+
+
+# OPCIÓN 2: 
+
+Lp2=matrix(c(1,1,0,0,0,
+             0,-1,1,0,0, 
+             0,-1,0,1,0, 
+             0,-1,0,0,1),byrow=T, ncol=5)
+Lp2
+
+# verificar que son funciones estimables
+
+round(Lp2[1,]%*%H,4)    
+round(Lp2[2,]%*%H,4)
+round(Lp2[3,]%*%H,4)
+round(Lp2[4,]%*%H,4)
+
+U2=X%*%ginv(Lp2)
+round(U2,4)
+
+
+# para obtener Lp a partir de U
+
+U=X[,-2]
+U  
+  
+Lp=ginv(ginv(X)%*%U)
+round(Lp,4)
+
+
+theta2=solve(t(U2)%*%U2)%*%t(U2)%*%Y
+theta2
+
+#lo mismo que hacer este modelo
+modelo2=lm(Y~A)
+modelo2$coefficients
+model.matrix(Y~A)
+```
+
+###Solucion imponiendo restricciones
+```{r}
+# ALTERNATIVA 3: uso de restricciones en las soluciones del sistema
+
+# opción 1: 
+
+C1=matrix(c(1,0,0,0,0),ncol=1); C1
+t(C1)%*%H    # es una función no estimable
+
+XpX=t(X)%*%X ;XpX
+XpXrestricciones1=rbind(XpX,t(C1))
+XpXrestricciones1=cbind(XpXrestricciones1,c(C1,0))  
+XpXrestricciones1
+
+inversa=round(solve(XpXrestricciones1),4); inversa
+
+XpYrestricciones=c(t(X)%*%Y,0)
+XpYrestricciones
+b.amp1=solve(XpXrestricciones1)%*%XpYrestricciones
+round(b.amp1,4)
+
+# inciso d
+
+round(q1%*%b.amp1[-6],4)
+round(q2%*%b.amp1[-6],4)
+round(q4%*%b.amp1[-6],4)
+
+
+# opción 2:
+
+C2=matrix(c(0,1,0,0,0),ncol=1); C2
+t(C2)%*%H    # es una función no estimable
+
+XpX=t(X)%*%X ;XpX
+XpXrestricciones2=rbind(XpX,t(C2))
+XpXrestricciones2=cbind(XpXrestricciones2,c(C2,0))  
+XpXrestricciones2
+
+XpYrestricciones=c(t(X)%*%Y,0)
+XpYrestricciones
+b.amp2=solve(XpXrestricciones2)%*%XpYrestricciones
+round(b.amp2,4)
+
+# inciso d
+
+round(q1%*%b.amp3[-6],4)
+round(q2%*%b.amp3[-6],4)
+round(q4%*%b.amp3[-6],4)
+```
+
+### INCISO E
+```{r}
+# para probar que no hay efecto de tratamientos
+K=matrix(c(0,3,-1,-1,-1, 
+           0,0,1,-1,0, 
+           0,0,0,1,-1),byrow=T, ncol=5)
+K
+
+K1=matrix(c(0,1,-1,0,0, 
+            0,0,1,-1,0, 
+            0,0,0,1,-1),byrow=T, ncol=5)
+K1
+
+m=matrix(c(0,0,0),byrow=T, ncol=1)
+m
+
+SCR=t(Y)%*%Y -t(Y)%*%X%*%G%*%t(X)%*%Y
+SCR
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+## o también
+
+modelo=lm(Y~A)
+model.matrix(modelo)
+
+b=modelo$coefficients ;b
+M=matrix(c(1,0,0,0,
+           1,1,0,0,
+           1,0,1,0,
+           1,0,0,1), byrow=T, ncol=4); M
+#medias de cada uno de los tratamientos continuamos trabajando con esta
+M%*%modelo$coefficients
+
+
+C=matrix(c(1,-1,0,0,
+           1,0,-1,0,
+           1,0,0,-1), byrow=T, ncol=4);C
+
+H=C%*%M ;H
+
+
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b)) 
+
+
+X1=model.matrix(modelo);X1
+P=X1%*%solve(t(X1)%*%X1)%*%t(X1)
+I=diag(1,nrow(X1))
+
+SCresidual=t(Y)%*%(I-P)%*%Y
+```
+
+### INCISO F
+```{r}
+#  contraste para diferencia de medias tratamiento 1 vs tratamiento 2
+
+K=matrix(c(0,1,-1,0,0),byrow=T, ncol=5)
+K
+
+m=matrix(c(0),byrow=T, ncol=1)
+m
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+
+
+###  o también:
+
+modelo=lm(Y~A)
+b=modelo$coefficients ;b
+
+#Matriz que permite recuperar las medias
+M=matrix(c(1,0,0,0,
+           1,1,0,0,
+           1,0,1,0,
+           1,0,0,1), byrow=T, ncol=4); M
+
+#medias de mi modelo
+M%*%modelo$coefficients
+
+#Permite comparar las medias
+C=matrix(c(1,-1,0,0), byrow=T, ncol=4)
+H=C%*%M
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+
+H%*%b
+micov=H%*%vcov(modelo2)%*%t(H)
+sqrt(micov)
+
+X1=model.matrix(modelo);X1
+P=X1%*%solve(t(X1)%*%X1)%*%t(X1)
+I=diag(1,nrow(X1))
+
+SCresidual=t(Y)%*%(I-P)%*%Y
+
+# OBTENCIÓN DE SUMAS DE CUADRADO POR TÉCNICA DE REDUCCIÓN
+
+# Suma de cuadrados de un modelo con U + A (modelo completo)
+
+SCR=t(Y)%*%Y -t(Y)%*%X%*%G%*%t(X)%*%Y
+SCR
+
+# Suma de cuadrados de un modelo con U 
+XU=X[,-(2:5)]
+XU
+
+SCRU=t(Y)%*%Y -t(Y)%*%XU%*%ginv(t(XU)%*%XU)%*%t(XU)%*%Y
+SCRU
+
+# reduccion en la SCR
+
+SCRU - SCR
+
+```
+
+##Actividad 2: BIFACTORIAL ADITIVO
+```{r}
+# actividad 2
+rm(list=ls());
+Y=matrix(c(6.29,6.38,6.25,6.32,6.44,6.29,5.80,5.92,5.78,5.95,6.05,5.89),ncol=1)
+A=factor(c(1,1,1,1,1,1,2,2,2,2,2,2))
+B=factor(c(1,1,1,2,2,2,1,1,1,2,2,2))
+
+
+# inciso b
+X=matrix(c(1,1,0,1,0, 1,1,0,1,0, 1,1,0,1,0, 1,1,0,0,1, 1,1,0,0,1, 1,1,0,0,1, 1,0,1,1,0, 1,0,1,1,0, 1,0,1,1,0, 1,0,1,0,1, 1,0,1,0,1, 1,0,1,0,1), byrow=T, ncol=5)
+X
+
+qr(X)$rank
+
+
+# inciso c
+```
+
+###Inversa generalizada
+```{r}
+# ALTERNATIVA 1: cálculo de una inversa generalizada para X'X
+
+library(MASS)
+G=ginv(t(X)%*%X)
+G
+
+bo=G%*%t(X)%*%Y
+bo
+
+# inciso d
+
+q1=c(0,0,0,1,-1) ;q1
+q2=c(0,1,-1,1,-1) ; q2
+
+
+H=G%*%t(X)%*%X
+
+round(q1%*%H,4)
+round(q2%*%H,4)
+
+round(q1%*%bo,4)
+round(q2%*%bo,4)
+```
+
+###Reparametrizacion del modelo
+```{r}
+# ALTERNATIVA 2: reparametrización del modelo
+
+# OPCIÓN 1: 
+
+# para obtener Lp a partir de U
+
+U=X[,-c(2,4)]
+U  
+
+Lp=ginv(ginv(X)%*%U)
+round(Lp,4)
+
+
+
+# verificar que son funciones estimables
+
+round(Lp[1,]%*%H,4)    
+round(Lp[2,]%*%H,4)
+round(Lp[3,]%*%H,4)
+
+
+theta=solve(t(U)%*%U)%*%t(U)%*%Y
+theta
+
+
+#Forma de hacerlo con modelos lineales
+modelo=lm(Y~A+B)
+b=modelo$coefficients
+model.matrix(Y~A+B)
+
+
+#Matriz para medias
+M=matrix(c(1,0,0,
+           1,0,1,
+           1,1,0,
+           1,1,1),byrow=T,ncol=3)
+rownames(M)=c("a1_b1","a1_b2","a2_b1","a2_b2")
+#medias para los tratamientos
+M%*%b
+
+#comparar m11 con m22
+Q=matrix(c(1,0,0,-1),ncol=4,byrow=T)
+
+#estimacion de esa diferencia de medias
+Q%*%M%*%b
+
+#Para prueba de hipotesis voy con esa H
+H=Q%*%M
+H
+```
+
+###Inciso E
+```{r}
+#inciso E,a)No hay efecto de los factores temperatura y horno
+#primero debo obtener las medias marginales
+
+K=matrix(c(1/2,1/2,0,0, #T1
+           0,0,1/2,1/2, # t2
+           1/2,0,1/2,0, #h1
+           0,1/2,0,1/2),byrow = T,ncol=4)
+
+K%*%M%*%b
+
+#Matriz para comparar
+Q=matrix(c(1,-1,0,0,
+           0,0,1,-1),byrow = T,ncol=4)
+
+H=Q%*%K%*%M
+H
+
+#Hago la prueba de hipotesis:
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+#perfecto!!!!!
+
+#inciso E,b) no hay efecto del factor horno
+K%*%M%*%b
+#comparar las ultimas 2
+Q=matrix(c(0,0,1,-1),byrow = T,ncol=4)
+
+H=Q%*%K%*%M
+H
+
+#Hago la prueba de hipotesis:
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+#perfecto!!!!!
+
+#YO PRUEBO NO HAY EFECTO DEL FACTOR TEMPERATRUA:
+K%*%M%*%b
+#comparar las primeras 2
+Q=matrix(c(1,-1,0,0),byrow = T,ncol=4)
+
+H=Q%*%K%*%M
+H
+
+#Hago la prueba de hipotesis:
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+#perfecto!!!!!
+```
+
+###Usando restricciones
+```{r}
+# ALTERNATIVA 3: uso de restricciones en las soluciones del sistema
+
+# opción 1:
+
+C=matrix(c(0,1,0,0,0, 0,0,0,1,0),ncol=2); C
+t(C)%*%H    # es una función no estimable
+
+XpX=t(X)%*%X ;XpX
+XpXrestricciones=rbind(XpX,t(C))
+XpXrestricciones=cbind(XpXrestricciones,rbind(C,0,0))  
+XpXrestricciones
+
+XpYrestricciones=c(t(X)%*%Y,0,0)
+XpYrestricciones
+b.amp=solve(XpXrestricciones)%*%XpYrestricciones
+round(b.amp,4)
+
+
+# inciso d
+
+round(q1%*%b.amp[-c(6,7)],4)
+round(q2%*%b.amp[-c(6,7)],4)
+
+
+
+# INCISO E apartado a)
+
+K=matrix(c(0,1,-1,0,0, 0,0,0,1,-1),byrow=T, ncol=5)
+K
+m=matrix(c(0,0),byrow=T, ncol=1)
+m
+
+SCR=t(Y)%*%Y -t(Y)%*%X%*%G%*%t(X)%*%Y
+SCR
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+
+Y
+
+
+# INCISO E apartado b)
+
+K=matrix(c(0,0,0,1,-1),byrow=T, ncol=5)
+K
+m=matrix(c(0),byrow=T, ncol=1)
+m
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+
+# OBTENCIÓN DE SUMAS DE CUADRADO POR TÉCNICA DE REDUCCIÓN.
+
+# Suma de cuadrados de un modelo con U + A + B (modelo completo)
+
+SCR=t(Y)%*%Y -t(Y)%*%X%*%G%*%t(X)%*%Y
+SCR
+
+# Suma de cuadrados de un modelo con U 
+XU=X[,-(2:5)]
+XU
+
+SCRU=t(Y)%*%Y -t(Y)%*%XU%*%ginv(t(XU)%*%XU)%*%t(XU)%*%Y
+SCRU
+
+# Suma de cuadrados de un modelo con U + A 
+XUA=X[,-(4:5)]
+XUA
+
+SCRUA=t(Y)%*%Y -t(Y)%*%XUA%*%ginv(t(XUA)%*%XUA)%*%t(XUA)%*%Y
+SCRUA
+
+# Suma de cuadrados de un modelo con U + B 
+XUB=X[,-(2:3)]
+XUB
+
+SCRUB=t(Y)%*%Y -t(Y)%*%XUB%*%ginv(t(XUB)%*%XUB)%*%t(XUB)%*%Y
+SCRUB
+
+# reduccion en la SCR
+
+SCRU - SCRUA      #  SC tipo I para A   SECUENCIALES
+SCRUA - SCR       #  SC tipo I para B
+
+
+SCRU - SCRUB      #  SC tipo I para B   SECUENCIALES
+SCRUB - SCR       #  SC tipo I para A
+
+
+SCRUB - SCR       #  SC tipo III para A  PARCIALES
+SCRUA - SCR       #  SC tipo III para B
+
+```
+
+##Actividad 3: BIFACTORIAL CON INTERACCION
+```{r}
+# actividad 3
+rm(list=ls());
+Y=matrix(c(6.29,6.38,6.25,6.32,6.44,6.29,5.80,5.92,5.78,5.95,6.05,5.89),ncol=1)
+A=factor(c(1,1,1,1,1,1,2,2,2,2,2,2))
+B=factor(c(1,1,1,2,2,2,1,1,1,2,2,2))
+
+
+# inciso b
+X=matrix(c(1,1,0,1,0,1,0,0,0, 
+           1,1,0,1,0,1,0,0,0, 
+           1,1,0,1,0,1,0,0,0, 
+           1,1,0,0,1,0,1,0,0, 
+           1,1,0,0,1,0,1,0,0, 
+           1,1,0,0,1,0,1,0,0,
+           1,0,1,1,0,0,0,1,0, 
+           1,0,1,1,0,0,0,1,0, 
+           1,0,1,1,0,0,0,1,0, 
+           1,0,1,0,1,0,0,0,1, 
+           1,0,1,0,1,0,0,0,1, 
+           1,0,1,0,1,0,0,0,1), byrow=T, ncol=9)
+X
+
+# inciso c
+```
+
+###Inversa generalizada
+```{r}
+# ALTERNATIVA 1: cálculo de una inversa generalizada para X'X
+
+library(MASS)
+G=ginv(t(X)%*%X)
+
+bo=G%*%t(X)%*%Y
+bo
+
+# inciso d
+
+q1=c(0,0,0,1,-1,1,-1,0,0)
+q2=c(0,1,-1,1,-1,1,0,0,-1)
+q3=c(1,0,1,0,1,0,0,0,1)
+
+# para verificar si son funciones estimables
+
+H=G%*%t(X)%*%X
+H
+
+round(q1%*%H,4)
+round(q2%*%H,4)
+round(q3%*%H,4)
+
+round(q1%*%bo,4)
+round(q2%*%bo,4)
+round(q3%*%bo,4)
+```
+
+###Reparametrizacion
+```{r}
+# ALTERNATIVA 2: reparametrización del modelo
+
+# OPCIÓN 1: 
+
+U=X[,-c(2,4,6,7,8)]
+U 
+
+Lp=ginv(ginv(X)%*%U)
+round(Lp,4)
+
+# verificación
+round(X%*%ginv(Lp),4)
+
+
+# verificar que son funciones estimables
+
+round(Lp[1,]%*%H,4)    
+round(Lp[2,]%*%H,4)
+round(Lp[3,]%*%H,4)
+round(Lp[4,]%*%H,4)
+
+theta=solve(t(U)%*%U)%*%t(U)%*%Y
+theta
+
+# inciso d
+
+
+modelo=lm(Y~A+B+A*B)
+b=modelo$coefficients  ; b
+model.matrix(Y~A+B+A*B)
+
+M=matrix(c(1,0,0,0,
+           1,0,1,0,
+           1,1,0,0,
+           1,1,1,1), byrow=T, ncol=4); M
+
+M%*%modelo$coefficients
+
+# medias marginales factor A 
+D1=matrix(c(1/2,1/2,0,0,
+           0,0,1/2,1/2), byrow=T, ncol=4); D1
+
+D1%*%M%*%b
+
+
+# medias marginales factor B 
+D2=matrix(c(1/2,0,1/2,0,
+           0,1/2,0,1/2), byrow=T, ncol=4); D2
+
+D2%*%M%*%b
+
+
+```
+
+###Restricciones
+```{r}
+# ALTERNATIVA 3: uso de restricciones en las soluciones del sistema
+
+# opción 1:
+
+C=matrix(c(0,1,0,0,0,0,0,0,0,  0,0,0,1,0,0,0,0,0,  0,0,0,0,0,1,0,0,0,  0,0,0,0,0,0,1,0,0,  0,0,0,0,0,0,0,1,0),ncol=5); C3
+t(C)
+C%*%H    # es una función no estimable
+
+XpX=t(X)%*%X ;XpX
+XpXrestricciones=rbind(XpX,t(C))
+XpXrestricciones=cbind(XpXrestricciones,rbind(C,0,0,0,0,0))  
+XpXrestricciones
+
+XpYrestricciones=c(t(X)%*%Y,0,0,0,0,0)
+XpYrestricciones
+b.amp=solve(XpXrestricciones)%*%XpYrestricciones
+round(b.amp,4)
+
+# inciso d
+
+round(q1%*%b.amp[-c(10:14)],4)
+round(q2%*%b.amp[-c(10:14)],4)
+
+
+
+
+
+
+# INCISO E apartado a)
+
+K=matrix(c(0,1,-1,0,0,0,0,0,0),byrow=T, ncol=9)
+K
+m=matrix(c(0),byrow=T, ncol=1)
+m
+
+SCR=t(Y)%*%Y -t(Y)%*%X%*%G%*%t(X)%*%Y
+SCR
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+# o bien ...
+
+
+D1%*%M%*%b
+
+C=matrix(c(1,-1),byrow=T, ncol=2); C
+
+H=C%*%D1%*%M ;H
+
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+
+
+
+
+
+# INCISO E apartado b)
+
+K=matrix(c(0,0,0,1,-1,0,0,0,0),byrow=T, ncol=9)
+K
+m=matrix(c(0),byrow=T, ncol=1)
+m
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+# o bien ...
+
+
+
+D2%*%M%*%b
+
+C=matrix(c(1,-1),byrow=T, ncol=2); C
+
+H=C%*%D2%*%M ;H
+
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+
+
+
+
+
+
+# INCISO E apartado c)
+
+K=matrix(c(0,0,0,0,0,1,-1,-1,1),byrow=T, ncol=9)
+K
+m=matrix(c(0),byrow=T, ncol=1)
+m
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+
+#  o bien ...
+
+
+C=matrix(c(1,-1,-1,1),byrow=T, ncol=4); C
+
+H=C%*%M ;H
+
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+
+
+
+
+# INCISO E apartado d)
+
+K=matrix(c(0,1,-1,0,0,0,0,0,0,  
+           0,0,0,1,-1,0,0,0,0,  
+           0,0,0,0,0,1,-1,0,0),byrow=T, ncol=9)
+K
+m=matrix(c(0,0,0),byrow=T, ncol=1)
+m
+
+Q=t(K%*%bo-m)%*%solve(K%*%G%*%t(K))%*%(K%*%bo-m)
+Q
+
+
+
+
+
+# o bien ...
+
+C=matrix(c(1,-1,0,0,
+           1,0,-1,0,
+           1,0,0,-1),byrow=T, ncol=4); C
+
+H=C%*%M ;H
+
+micov=H%*%vcov(modelo)%*%t(H)
+
+w=(t(H%*%b)%*%solve(micov)%*%H%*%b)/nrow(H); w
+```
+
+### OBTENCIÓN DE SUMAS DE CUADRADO POR TÉCNICA DE REDUCCIÓN.
+```{r}
+#Calculo con X sobreparametrizada
+# Suma de cuadrados de un modelo con U + A + B + C=A*B (modelo completo)
+library(MASS)
+SCR=t(Y)%*%Y -t(Y)%*%X%*%ginv(t(X)%*%X)%*%t(X)%*%Y
+SCR
+
+# Suma de cuadrados de un modelo con U 
+XU=X[,-(2:9)]
+XU
+SCRU=t(Y)%*%Y -t(Y)%*%XU%*%ginv(t(XU)%*%XU)%*%t(XU)%*%Y
+SCRU
+
+
+# Suma de cuadrados de un modelo con U + A 
+XUA=X[,-(4:9)]
+XUA
+SCRUA=t(Y)%*%Y -t(Y)%*%XUA%*%ginv(t(XUA)%*%XUA)%*%t(XUA)%*%Y
+SCRUA
+
+# Suma de cuadrados de un modelo con U + B 
+XUB=X[,-c(2,3,6:9)]
+XUB
+SCRUB=t(Y)%*%Y -t(Y)%*%XUB%*%ginv(t(XUB)%*%XUB)%*%t(XUB)%*%Y
+SCRUB
+
+
+# Suma de cuadrados de un modelo con U + A + B 
+XUAB=X[,-(6:9)]
+XUAB
+SCRUAB=t(Y)%*%Y -t(Y)%*%XUAB%*%ginv(t(XUAB)%*%XUAB)%*%t(XUAB)%*%Y
+SCRUAB
+
+
+
+# reduccion en la SCR
+
+SCRU - SCRUA       #  SC tipo I para A    
+SCRUA - SCRUAB     #  SC tipo I para B
+SCRUAB - SCR       #  SC tipo I para A*B
+
+```
+
+##Actividad 3 por mi: con verificacion sumas de cuadrados
+```{r}
+# actividad 3 por reparametrizacion
+rm(list=ls());
+Y=matrix(c(6.29,6.38,6.25,6.32,6.44,6.29,5.80,5.92,5.78,5.95,6.05,5.89),ncol=1)
+A=factor(c(1,1,1,1,1,1,2,2,2,2,2,2))
+B=factor(c(1,1,1,2,2,2,1,1,1,2,2,2))
+
+modelo=lm(Y~A+B+A*B)
+b=modelo$coefficients  ; b
+X=model.matrix(modelo)
+
+M=matrix(c(1,0,0,0,
+           1,0,1,0,
+           1,1,0,0,
+           1,1,1,1), byrow=T, ncol=4); M
+rownames(M)=c("a1_b1","a1_b2","a2_b1","a2_b2")
+E=M%*%b;E
+
+#Matriz de medias marginales:
+K=matrix(c(1/2,1/2,0,0, #T1
+           0,0,1/2,1/2, # t2
+           1/2,0,1/2,0, #h1
+           0,1/2,0,1/2),byrow = T,ncol=4)
+rownames(K)=c("T1","T2","H1","H2")
+MM=K%*%M%*%b;MM
+
+#Inciso E
+
+#A)No hay efecto del factor temperatura
+MM
+#comparar las primeras 2
+Q=matrix(c(1,-1,0,0),byrow = T,ncol=4)
+H=Q%*%K%*%M
+H
+#Hago la prueba de hipotesis:
+#micov=H%*%vcov(modelo)%*%t(H)
+w=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+
+#Suma de cuadrados asociada Q
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+Q1=(t(H%*%b)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%H%*%b);Q
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+
+
+#B)No hay efecto del factor horno
+MM
+#comparar las primeras 2
+Q=matrix(c(0,0,1,-1),byrow = T,ncol=4)
+H=Q%*%K%*%M
+H
+#Hago la prueba de hipotesis:
+#micov=H%*%vcov(modelo)%*%t(H)
+w=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+
+#Suma de cuadrados asociada Q
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+Q2=(t(H%*%b)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%H%*%b)
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+
+
+#C)No hay efecto de interaccion temperatura*horno
+#No tengo que trabajar sobre la matriz de medias marginales, si no que la de por tratamiento
+M%*%b
+Q=matrix(c(1,-1,-1,1),byrow = T,ncol=4)
+H=Q%*%M
+H
+#Hago la prueba de hipotesis:
+#micov=H%*%vcov(modelo)%*%t(H)
+w=(t(H%*%b)%*%solve(H%*%vcov(modelo)%*%t(H))%*%H%*%b)/nrow(H); w
+1-pf(w,nrow(H),nrow(Y)-length(b))
+
+#Suma de cuadrados asociada Q
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+Q3=(t(H%*%b)%*%solve(H%*%solve(t(X)%*%X)%*%t(H))%*%H%*%b)
+SCR=t(Y)%*%(I-P)%*%Y;SCR
+
+
+#ojo ver como calcula las sumas de cuadrados
+n=nrow(X)
+p=ncol(X)
+I=diag(1,nrow(X))
+P=X%*%(solve(t(X)%*%X)%*%t(X))
+
+U=matrix(rep(1,nrow(X)),ncol=1) #como la corrijo
+P1=U%*%solve(t(U)%*%U)%*%t(U)
+
+SCT=t(Y)%*%Y;SCT
+SCMnc=t(Y)%*%P%*%Y;SCMnc
+SCR=t(Y)%*%(I-P)%*%Y;SCR #0.046 me da igual perfecto
+
+round(SCT,3)==round(SCMnc+SCR,3)
+
+SCbo=t(Y)%*%P1%*%Y;SCbo
+SCMc=t(Y)%*%(P-P1)%*%Y;SCMc
+
+round(SCMc,3)==round(Q1+Q2+Q3,3)
+
+
+```
+####Parte funciones estimables 
+```{r}
+#parte de las funciones estimables
+#matriz de incidencia
+X=matrix(c(1,1,0,1,0,1,0,0,0,
+           1,1,0,1,0,1,0,0,0,
+           1,1,0,1,0,1,0,0,0,
+           1,1,0,0,1,0,1,0,0,
+           1,1,0,0,1,0,1,0,0,
+           1,1,0,0,1,0,1,0,0,
+           1,0,1,1,0,0,0,1,0,
+           1,0,1,1,0,0,0,1,0,
+           1,0,1,1,0,0,0,1,0,
+           1,0,1,0,1,0,0,0,1,
+           1,0,1,0,1,0,0,0,1,
+           1,0,1,0,1,0,0,0,1),ncol=9,byrow=T)
+library(MASS)
+G=ginv(t(X)%*%X)
+
+bo=G%*%t(X)%*%Y
+bo
+
+#Obtengo las medias para cada tratamiento
+C=matrix(c(1,1,0,1,0,1,0,0,0,
+           1,1,0,0,1,0,1,0,0,
+           1,0,1,1,0,0,0,1,0,
+           1,0,1,0,1,0,0,0,1),ncol=9,byrow=T)
+C%*%bo #medias para cada tratamiento
+
+#Funciones estimables a partir del despeje en calculo
+q1=c(0,0,0,1,-1,1,-1,0,0)
+q2=c(0,1,-1,1,-1,1,0,0,-1)
+
+round(q1%*%G%*%t(X)%*%X,4)==q1
+round(q2%*%G%*%t(X)%*%X,4)==q2
+```
+
+
+#Guia practica numero 1
+```{r}
+rm(list=ls());
+###################### Guia 1
+
+# si no quiere andar la funcion rango entonces probar
+# library("Matrix")
+# rankMatrix(x)
+```
+
+##Ejercicio 1
+###Matriz C seleccionadora k=4, n=8, n-k=4
+```{r}
+C=cbind(diag(4),rep(0),rep(0),rep(0),rep(0));C
+```
+
+```{r}
+rm(list=ls());
+#cargamos los datos
+V <- matrix(c(3,1,0,
+              1,2,1,
+              0,1,4),nrow=3,byrow=TRUE); V
+M <- matrix(c(0,0,0), ncol=1); M
+```
+###A) Auxiliar formula distribucion
+```{r}
+#calculos auxiliares: a) Para escribir la formula de la distribucion
+det(V)**(-0.5)
+solve(V)
+n=nrow(M)
+```
+###B) Distribucion marginal
+```{r}
+#Punto b.1) Marginal de X1
+#matriz C que selecciona
+C <- matrix(c(1,0,0), ncol=3); C
+#La matriz de medias es 0 asique la constante c = 0
+C%*%M
+C%*%V%*%t(C)
+
+#b.2) Marginal de X3, reordenar
+#Vr <- matrix(c(4,1,0,
+#               1,2,1,
+#               0,1,3),nrow=3,byrow=TRUE); Vr
+
+Vaux <- V[c(3,2,1),];
+Vre <- Vaux[,c(3,2,1)];
+Vre
+
+#misma matriz C que selecciona pq reordene
+C%*%M
+C%*%Vre%*%t(C)
+```
+
+###C)Distribucion conjunta = Marginal pero juntas
+```{r}
+#C.1)Distribucion conjunta X1,X2 no hace falta reordenar
+#matriz C que selecciona
+C2 <- matrix(c(1,0,0,
+               0,1,0), ncol=3, byrow=T); C2
+#si fuese c(1,1,0) me sumaria las dos, yo quiero seleccionarlas.
+C2%*%M
+C2%*%V%*%t(C2)
+
+#C.2)Distribucion conjunta X1,X3 hace falta reordenar
+#matriz C que selecciona es la misma pero debo reordenar
+Vaux <- V[c(1,3,2),];
+Vr <- Vaux[,c(1,3,2)];
+Vr
+
+C2%*%M
+C2%*%Vr%*%t(C2)
+```
+
+###D) Distribucion condicionada
+```{r}
+#d.1)
+#Matriz reordenada para X2/x1,x3
+#1 Reordeno
+Vaux <- V[c(2,1,3),];
+Vr <- Vaux[,c(2,1,3)];
+Vr
+
+Mr<- M[c(2,1,3)]
+
+#2 Selecciono caso una sola variable de interes
+V11 <- Vr[1,1]; V11
+V12 <- Vr[1,2:3]; V12
+V21 <- as.matrix(Vr[2:3,1]); V21
+V22 <- as.matrix(Vr[2:3,2:3]); V22
+
+M1<- Mr[1]
+M2<- Mr[2:3]
+
+#sirve para M1.2
+M1
+V12%*%solve(V22) # multiplicado por (y2-M2)
+#V11.2
+V11-V12%*%solve(V22)%*%V21
+
+#d.2)X1,X3/X2
+#Reordeno
+Vaux <- V[c(1,3,2),];
+Vr <- Vaux[,c(1,3,2)];
+Vr
+
+Mr<- M[c(1,3,2)]
+
+#Selecciono
+V11 <- Vr[1:2,1:2]; V11
+V12 <- as.matrix(Vr[1:2,3]); V12
+V21 <- Vr[3,1:2]; V21
+V22 <- Vr[3,3]; V22
+
+M1<- Mr[1]
+M2<- Mr[2:3]
+
+#sirve para M1.2
+M1
+V12%*%solve(V22) # multiplicado por (y2-M2)
+
+#V11.2
+V11-V12%*%solve(V22)%*%V21
+```
+
+###E)Matriz correlacion
+```{r}
+#### Inciso e (matriz de correlacion)
+D <- diag(diag(V)); D
+Daux <- sqrt(solve(D)); Daux
+R <- Daux%*%V%*%Daux ; R
+```
+
+###F) Matriz correlacion parcial
+```{r}
+#### Inciso f.1) (matriz de correlacion parcial (1,2)/3), no hace falta ordenar nada
+V
+
+#Selecciono
+V11 <- V[1:2,1:2]; V11
+V12 <- as.matrix(V[1:2,3]); V12
+V21 <- V[3,1:2]; V21
+V22 <- V[3,3]; V22
+
+#Calculo
+V11.2 <- V11-(V12%*%solve(V22)%*%V21); V11.2
+D11.2 <- diag(diag(V11.2)); D11.2 #diagonal de V11.2
+D11.2aux <- sqrt(solve(D11.2)); D11.2aux #inversa a la -1/2
+R1.2 <- D11.2aux%*%V11.2%*%D11.2aux; R1.2
+
+# f.2) correlacion parcial (1,3)/2
+# sera lo mismo pero hay que reordenar V rotando columna 2 con 3 y luego fila 2 con 3
+#Reordeno
+Vaux <- V[c(1,3,2),];
+Vr <- Vaux[,c(1,3,2)];
+Vr
+
+#Selecciono
+V11 <- Vr[1:2,1:2]; V11
+V12 <- as.matrix(Vr[1:2,3]); V12
+V21 <- Vr[3,1:2]; V21
+V22 <- Vr[3,3]; V22
+
+#Calculo
+V11.2 <- V11-(V12%*%solve(V22)%*%V21); V11.2
+D11.2 <- diag(diag(V11.2)); D11.2
+D11.2aux <- sqrt(solve(D11.2)); D11.2aux
+R1.2 <- D11.2aux%*%V11.2%*%D11.2aux; R1.2
+```
+
+###G) Distribucion de Z(x)
+```{r}
+#g)
+#para encontrar var(Z)
+V
+#Matriz C que permite obtener Z=C * X + c
+C<-matrix(c(3,-2,0),nrow=1,byrow=TRUE); C
+c=-11
+
+C%*%V%*%t(C) #Varianza
+C%*%M+c #Media
+```
+
+###H) Covarianza Z1 y Z2
+```{r}
+#e)
+C1=matrix(c(2,-3,0),ncol=3,byrow=T)
+C2=matrix(c(0,0,3),ncol=3,byrow=T)
+c1=-11
+c2=2
+
+C1%*%V%*%t(C2)
+```
+
+##Ejercicio 2
+```{r}
+rm(list=ls());
+```
+
+###A) Medias y varianzas
+```{r}
+#### Inciso a
+getwd()
+setwd("C:/Users/Jose Maria/Desktop/MODELOS LINEALES/GUIA practica 1")
+datos <- read.table("calefaccion.txt", header=TRUE);
+M <- apply(datos, 2, mean); M #medias por columnas
+V <- cov(datos); V # insesgada
+```
+
+###B)Matriz correlacion
+```{r}
+#### Inciso b
+R <- cor(datos); R
+
+# manualmente
+D <- diag(diag(V));
+Daux <- sqrt(solve(D));
+R <- Daux %*% V %*% Daux; R
+```
+
+###Matriz correlacion parcial
+```{r}
+#### Inciso c (matriz de correlacion parcial (1,2)/3)
+# en forma manual #no hace falta reordenar
+V
+
+#Selecciono (2 primeras de interes)
+V11 <- V[1:2,1:2]; V11
+V12 <- as.matrix(V[1:2,3]); V12
+V21 <- V[3,1:2]; V21
+V22 <- V[3,3]; V22
+
+V11.2 <- V11 - (V12 %*% solve(V22) %*% V21); V11.2 # pag 15
+D11.2 <- diag(diag(V11.2)); D11.2
+D11.2aux <- sqrt(solve(D11.2)); D11.2aux
+RP <- D11.2aux %*% V11.2 %*% D11.2aux; RP
+
+# con software (todas: (1,2)/3;(1,3)/2 y (2,3)/1)
+library(corpcor);
+RP <- cor2pcor(R); RP
+```
+
+###Distribucion condicional (1,3/2)
+```{r}
+#1 Reordeno
+Vaux <- V[c(1,3,2),];
+Vr <- Vaux[,c(1,3,2)];
+Vr
+
+Mr<- M[c(1,3,2)]
+
+#2 Selecciono caso una sola variable de interes
+V11 <- Vr[1:2,1:2]; V11
+V12 <- as.matrix(Vr[1:2,3]); V12
+V21 <- Vr[3,1:2]; V21
+V22 <- Vr[3,3]; V22
+
+M1<- Mr[1:2]
+M2<- Mr[3]
+
+#sirve para M1.2
+M1
+V12%*%solve(V22) # multiplicado por (y2-M2)
+#V11.2
+V11-V12%*%solve(V22)%*%V21
+```
+
+
+
+##Ejercicio 3
+```{r}
+rm(list=ls());
+V <- matrix(c(2,-1,0,-1,4,0,0,0,1),nrow=3,byrow=TRUE); V
+M <- matrix(c(2,1,4),nrow=3,byrow=TRUE); M
+```
+
+###A) Distribucion conjunta
+```{r}
+#a)Distribucion conjunta de X1,X2
+#No hace falta reordenar, matriz que selecciona
+C<-matrix(c(1,0,0,
+            0,1,0),nrow=2,byrow=TRUE); C
+
+V11<-C%*%V%*%t(C);V11
+M1<- C%*%M;M1
+
+C2=matrix(c(0,0,1),ncol=3,byrow=T)
+M2=C2%*%M
+
+V12<-V[1:2,3]
+V21<-V[3,1:2]
+V22<-V[3,3]
+```
+
+###B) Distribucion condicional
+```{r}
+#b)Distribucion condicional x1,x2/x3
+#No hace falta reordenar 
+#La parte de seleccion lo hice en el enunciado anterior
+#Calculos:
+#Para el calculo de mu
+M1
+(V12%*%solve(V22))
+
+#Varianza
+V11.2=V11-V12%*%solve(V22)%*%V21;V11.2
+```
+
+###C) Matriz correlacion
+```{r}
+#### Inciso c
+#matriz de correlacion
+D <- diag(diag(V))
+Daux <- sqrt(solve(D))
+R <- Daux %*% V %*% Daux ; R 
+
+# para obtener la correlacion parcial (1,2)/3
+#No hace falta reordenar
+#Selecciono
+V11 <- V[1:2,1:2]; V11
+V12 <- as.matrix(V[1:2,3]); V12
+V21 <- V[3,1:2]; V21
+V22 <- V[3,3]; V22
+
+#Calculos
+V11.2 <- V11 - (V12 %*% solve(V22) %*% V21); V11.2
+D11.2 <- diag(diag(V11.2)); D11.2
+D11.2aux <- sqrt(solve(D11.2));
+RP <- D11.2aux %*% V11.2 %*% D11.2aux; RP
+```
+
+##Ejercicio 5
+```{r}
+###### Ejercicio 5 resuelto con descomposicion cholesky
+rm(list=ls());
+Vx <- diag(3);Vx
+Mx <- matrix(c(0,0,0), nrow=3);Mx
+
+Vy <- matrix(c(7, 2, 1, 
+               2, 7, -1, 
+               1, -1, 4), nrow=3, byrow=T) # Sea Y la que queremos conseguir (CX + c)
+gammay <- chol(Vy);
+C <- t(gammay);C
+```
+
+##Ejercicio 6
+```{r}
+###### Ejercicio 6
+rm(list=ls());
+Vx <- matrix(c(3, 1, 1, 3), nrow=2, byrow=T);
+Mx <- matrix(c(1, 2), nrow=2, byrow=T);
+
+Vy <- diag(2);
+
+gammax <- chol(Vx);
+Ti <- solve(t(gammax));
+
+Ti%*%Mx
+```
+
+## Ejercicio 7: verificar si es chi cuadrado
+```{r}
+###### Ejercicio 7
+rm(list=ls());
+C <- diag(2);
+V <- matrix(c(3,1,1,3), nrow=2, byrow=T)
+Vm <- C %*% V %*% t(C)
+M
+
+#Estamos ante una fomra cuadratica del caso C con y(M,E)
+#yAy´
+A <- solve(V);
+
+rango <- function(x) { return(qr(x)$rank) };
+esIdempotente <- function(x) { all(x %*% x == x) };
+esSimetrica <- function(x) { all(x == t(x)) };
+
+esSimetrica(A);
+rango(A);
+esIdempotente(A %*% Vm);
+
+0.5*(t())
+```
+
+## Ejercicio 8
+```{r}
+###### Ejercicio 8 (ver si BY y Y'AY son indep)
+# Y ~ N3(My, I)
+rm(list=ls());
+A <- matrix(c(1/6,1/3,1/6,1/3,2/3,1/3,1/6,1/3,1/6), nrow=3, byrow=T);
+B <- matrix(c(2,-1,0,-1,0,1), nrow=2, byrow=T);
+rango <- function(x) { return(qr(x)$rank) };
+esSimetrica <- function(x) { all(x == t(x)) };
+
+esSimetrica(A);
+rango(A); # Como no es de rango completo entonces veamos el caso general Y ~ N(M,V)
+V <- diag(3);
+all(B %*% V %*% A == 0);
+B%*%V%*%A #caso 2 pq A no es de rango K
+```
+
+## Ejercicio 9
+```{r}
+###### Ejercicio 9
+# Y ~ N2(My, Vy)
+rm(list=ls());
+My <- matrix(c(1,3), nrow=2);
+Vy <- matrix(c(1,1,1,2), nrow=2, byrow=T);
+B <- matrix(c(0.5,0.5,-1,1), nrow=2, byrow=T);
+A <- matrix(c(2,-1,-1,1), nrow=2, byrow=T);
+```
+
+###A) BY y Y'AY son indep
+```{r}
+#### Inciso a (ver si BY y Y'AY son indep)
+esSimetrica <- function(x) { all(x == t(x)) };
+rango <- function(x) { return(qr(x)$rank) };
+
+esSimetrica(A);
+rango(A)
+all(B %*% Vy %*% A == 0);
+B %*% Vy %*% A #por lo tanto no son independientes.
+```
+
+###B) distribucion de Y'AY, verificar supuestos
+```{r}
+#### Inciso b (buscar distribucion de Y'AY)
+rango <- function(x) { return(qr(x)$rank) };
+esIdempotente <- function(x) { all(x %*% x == x) };
+esSimetrica(A);
+rango(A);
+esIdempotente(A %*% Vy);
+(A%*%Vy)%*%(A%*%Vy) #verificacion es idempontente
+1/2 * t(My) %*% A %*% My; # parametro de no centralidad
+
+# por lo tanto Y'AY ~ chi-cuad con 2 (rango(A)) g.l. y parametro de no centr. 2.5
+```
+
+## Ejercicio 10
+```{r}
+###### Ejercicio 10 (ver si Y'BY y Y'AY son indep)
+# Y ~ N3(My, Vy)
+rm(list=ls());
+My <- matrix(c(1,3), nrow=2);
+Vy <- matrix(c(1,1,1,2), nrow=2, byrow=T);
+B <- matrix(c(2,-1,-1,1), nrow=2, byrow=T);
+A <- matrix(c(3,1/2,1/2,2), nrow=2, byrow=T);
+
+esSimetrica <- function(x) { all(x == t(x)) };
+esSimetrica(A);
+esSimetrica(B);
+
+all(A %*% Vy %*% B == 0) #por lo tanto no son independientes
+```
+##
+```{r}
+
+```
+
+##
+```{r}
+
+```
+
+##
+```{r}
+
+```
+

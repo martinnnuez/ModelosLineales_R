@@ -1,0 +1,356 @@
+---
+title: "Examen Final Modelos Lineales"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+## Base de datos y ajuste del modelo:
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(nlme)
+Tr=matrix(c(rep("A",4),rep("B",4),rep("C",4)),ncol=1)
+X=matrix(c(1,5,10,15,1,5,10,15,1,5,10,15),ncol=1)
+Y=matrix(c(39.7,42.5,44.6,47.9,45.1,47.3,50.1,53.1,39.5,42.9,46.1,46.8),ncol=1)
+datos<-data.frame(Tr,X,Y)
+colnames(datos)<-c("Tr","X","Y")
+modelo=gls(Y~Tr+X+Tr*X,data=datos)
+```
+
+* Coeficientes del modelo:
+```{r}
+#Coeficientes del modelo:
+b=modelo$coefficients;b
+```
+
+
+## Item 1:
+ Escribir la matriz M de la transformación lineal de los parámetros que devuelve las medias de para todos los tratamientos dado un valor de x=8.
+ 
+ * Matriz M:
+```{r}
+x=8
+#Matriz M
+M=matrix(c(1,0,0,x,0,0,
+           1,1,0,x,x,0,
+           1,0,1,x,0,x),byrow=T,ncol=length(modelo$coefficients));M
+```
+
+* Medias para cada tratamiento:
+```{r}
+rownames(M)=c("A","B","C")
+#Medias para cada tratamiento
+M%*%b
+```
+
+
+## Item 2:
+ Escribir la matriz D de la transformación lineal de los parámetros que devuelve diferencia de medias los tratamientos T1 y T3 dado un valor de x=8.
+```{r}
+Q=matrix(c(1,0,-1),ncol=3,byrow=T)
+
+#Diferencia estimada:
+Q%*%M%*%b
+```
+
+* Matriz D:
+```{r}
+#Matriz D:
+D=Q%*%M;D
+```
+* En este caso el x ya estaba fijo en 8 por eso no lo volvi a definir.
+
+
+## Item 3:
+ Calcular el error estándar de la diferencia de medias entre los tratamientos T1 y T3 dado un valor de x=8.
+
+* Varianza de la diferencia estimada:
+```{r}
+varD=D%*%vcov(modelo)%*%t(D)
+```
+
+* Error estandar de la diferencia estimada:
+```{r}
+EED=sqrt(varD);EED
+```
+* EED = 0.5077033
+
+## Item 4:
+ Escriba la matriz H y el vector h, para cada hipótesis especificada de la forma Hβ=h que reproduce los resultados de las tres hipótesis de la Tabla 2. Verifique que puede reproducir los resultados. Ayuda, es más facil pensar en términos de KMβ=h, donde KM=H y M la matriz de la transformación lineal que devuelve las medias de tratamientos.
+
+### A) Fila T cuadro analisis de la varianza:
+```{r}
+#A) Fila T cuadro analisis de la varianza:
+#Prueba que TrB y TrC son simultaneamente iguales a 0
+K=matrix(c(0,1,0,0,0,0,
+           0,0,1,0,0,0),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0,0),ncol=1,byrow=T);h
+```
+
+* Test de hipotesis de Wald:
+```{r}
+#Test de hipotesis de Wald:
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H);W
+```
+
+* p-valor:
+```{r}
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+```
+
+### B) Fila X cuadro analisis de la varianza:
+
+* No pude descubrirlo, probe de todo. Dejo la prueba de la pendiente para la covariable que es la que estoy mas seguro que deberia ser aunque no verifique con los resultados de la tabla.
+```{r}
+#B) Fila X cuadro analisis de la varianza: 
+K=matrix(c(0,0,0,1,0,0),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0),ncol=1,byrow=T);h
+```
+
+* Test de hipotesis de Wald:
+```{r}
+#Test de hipotesis de Wald:
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H);W
+```
+
+* p-valor:
+```{r}
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+```
+
+### C) Fila T:X cuadro analisis de la varianza:
+```{r}
+#C) Fila T:X cuadro analisis de la varianza:
+#Prueba que las tres pendientes son iguales:
+K=matrix(c(0,0,0,0,1,0,
+           0,0,0,0,0,1),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0,0),ncol=1,byrow=T);h
+```
+
+* Test de hipotesis de Wald:
+```{r}
+#Test de hipotesis de Wald:
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H);W
+```
+
+* p-valor:
+```{r}
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+```
+ 
+A) La fila T cuadro analisis de la varianza prueba que TrB y TrC son simultaneamente iguales a 0.
+* W = 20.31395
+* p-valor = 0.002130669
+
+B) Para la fila X del cuadro analisis de la varianza probe de todo, y ninguna de las hipotesis que yo crei que tenian sentido fueron la misma muestra el resultado de este cuadro. 
+* Al tener solo un grado de libertad, las dimencion de H deberia ser 1x6, y al tratarse de una prueba de hipotesis sobre la covariable, pense que la prueba mas logica para esta fila era la de Ho: beta4=0, pero esto no coincidio con los resultados. Luego de probar distintas combinaciones para H, no pude llegar al mismo resultado que la tabla. Para no adjuntarle las 30 pruebas de hipotesis que hice en este punto, solo le dejo la prueba de hipotesis sobre el efecto de la covariable. 
+* Hice todo lo que pude pero no encontre respuesta, me gustaria saber cual era la respuesta correcta.
+* W = 69.17656
+* p-valor = 0.0001638715
+
+C) La fila T:X del cuadro analisis de la varianza, prueba que las 3 pendiente son iguales entre ellas.
+* W = 0.1225991
+* p-valor = 0.8867784
+
+
+## Item 5:
+ Escriba la matriz H y el vector h, para la hipótesis de que la diferencia de medias entre el tratamiento T1 y el tratamiento T3 cuando la covariable es igual a 8, es la misma que la diferencia de medias entre el tratamiento T1 y T3 cuando la covariable es igual a 10. Ayuda, es más facil pensar en términos de KMβ=h, donde KM=H y M la matriz de la transformación lineal que devuelve las medias de tratamientos.
+```{r}
+K=matrix(c(0,0,0,0,0,2),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0),ncol=1,byrow=T);h
+```
+- Despeje:
+* Con x=8: 
+* D1=T1-T3= -Ic.C - Ic.X.B6= -C - 8.B6=
+* Con x=10: 
+* D2=T1-T3= -Ic.C - Ic.X.B6= -C - 10.B6=
+- Igualando:
+* D1=D2
+* -C - 8.B6=-C - 10.B6
+* (-8+10).B6=0
+* 2.B6=0
+* Ho: 2.B6 = 0
+
+
+## Item 6:
+ Obtener el p-valor para la hipótesis de que la diferencia de medias entre el tratamiento T1 y el tratamiento T3 cuando la covariable es igual a 8, es la misma que la diferencia de medias entre el tratamiento T1 y T3 cuando la covariable es igual a 10.
+ 
+* Test de hipotesis de Wald:
+```{r}
+#Test de hipotesis de Wald:
+W=t((H%*%b)-h)%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b-h)/nrow(H);W
+```
+
+* p-valor:
+```{r}
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+```
+* W = 0.1660864
+* p-valor = 0.6977557
+
+
+## Item 7:
+ Escriba la matriz H y el vector h, para la hipótesis de que las tres rectas correspondientes a los tres tratamientos son iguales.
+```{r}
+K=matrix(c(0,1,0,0,0,0,
+           0,0,1,0,0,0,
+           0,0,0,0,1,0,
+           0,0,0,0,0,1),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0,0,0,0),ncol=1,byrow=T);h
+
+#Test de hipotesis de Wald:
+W=t((H%*%b))%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b)/nrow(H);W
+
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+
+```
+* Ordenadas al origen iguales= H0: m = m+B = m+C
+* Pendientes iguales= H0: B4 = (B4+B5) = (B4+B6)
+* W = 34.45894
+* p-valor = 0.0002812605
+
+
+## Item 8:
+ Escriba la matriz H y el vector h, para la hipótesis de que las tres rectas son paralelas.
+```{r}
+K=matrix(c(0,0,0,0,1,0,
+           0,0,0,0,0,1),ncol=6,byrow=T)
+```
+
+* Matriz H:
+```{r}
+#Matriz H:
+H=K;H
+```
+
+* Vector h:
+```{r}
+#Vector h:
+h=matrix(c(0,0),ncol=1,byrow=T);h
+
+#Test de hipotesis de Wald:
+W=t((H%*%b))%*%solve(H%*%vcov(modelo)%*%t(H))%*%(H%*%b)/nrow(H);W
+
+#p-valor:
+1-pf(W,nrow(H),nrow(datos)-length(b))
+```
+* La hipotesis nula para la hipotesis de que las tres rectas son paralelas es:
+* Ho: B4 = (B4+B5) = (B4+B6)
+* W = 0.1225991
+* p-valor = 0.8867784
+
+
+## Item 9:
+ ¿Cuál es el intervalo de confianza al 95% para la esperanza de Y bajo el tratamiento T2 cuando la covariable x=8? Muestre los calculos matriciales para obtener:
+
+a) El valor esperado:
+```{r}
+P=matrix(c(1,1,0,8,8,0),ncol=6,byrow=T)
+
+#a) Valor esperado:
+Vesp=P%*%b;Vesp
+```
+
+b) El error estandar:
+```{r}
+#b) Error estandar:
+varP=P%*%vcov(modelo)%*%t(P)
+EEP=sqrt(varP);EEP
+```
+
+c) ¿comó obtine los limites del intervalo de confianza?
+```{r}
+#c) Limites del intervalo de confianza al 95%:
+n=nrow(datos)
+p=length(modelo$coefficients)
+LI=Vesp-qt(0.975,(n-p))*EEP
+LS=Vesp+qt(0.975,(n-p))*EEP
+c(LI,LS)
+```
+
+a) Valor esperado = 49.04266
+
+b) Error estandar = 0.3590004
+
+c) Limites del intervalo de confianza al 95%:
+* Limite inferior: 48.16422
+* Limite superior: 49.92111
+
+##
+```{r}
+
+```
+
+##
+```{r}
+
+```
+
+##
+```{r}
+
+```
